@@ -22,7 +22,7 @@ struct ContentView: View {
                     HStack {
                         Spacer()
 
-                        NavigationLink(destination: AnimalPickerView()) {
+                        NavigationLink(destination: LoginView()) {
                             Image("StartButton")
                                 .resizable()
                                 .interpolation(.none)
