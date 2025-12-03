@@ -24,6 +24,17 @@ struct GameView: View {
         _engine = State(wrappedValue: GameEngine(animal: animal))
     }
     
+    // Computed property for next button text
+    private var nextButtonText: String {
+        if !engine.isLastLevelInLesson {
+            return "Next Level"
+        } else if !engine.isLastLessonInUnit {
+            return "Next Lesson"
+        } else {
+            return "Complete!"
+        }
+    }
+    
     var body: some View {
         ZStack {
             // RealityKit 3D Scene - Full screen, interactive
@@ -43,37 +54,51 @@ struct GameView: View {
                     }
             )
             
-            // Simple level title at top
+            // Unit/Lesson/Level title at top
             VStack {
-                Text("Level \(engine.currentLevel + 1)")
-                    .font(.title)
-                    .foregroundColor(.white)
-                    .shadow(color: .black, radius: 3)
-                    .padding(.top, 10)
-                    .allowsHitTesting(false)
+                VStack(spacing: 4) {
+                    Text(engine.unitName)
+                        .font(.headline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .shadow(color: .black, radius: 2)
+                    
+                    Text("Lesson \(engine.currentLesson + 1): \(engine.currentLessonName)")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2)
+                    
+                    Text("Level \(engine.currentLevel + 1)")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.9))
+                        .shadow(color: .black, radius: 2)
+                }
+                .padding(.top, 10)
+                .allowsHitTesting(false)
                 
                 Spacer()
                 
                 // Controls at bottom
                 HStack(spacing: 15) {
                     if engine.currentStep == engine.currentSentence.count {
-                        Button("Next Level") {
+                        Button(nextButtonText) {
                             engine.nextLevel()
                             sceneUpdateTrigger += 1
                         }
                         .buttonStyle(.borderedProminent)
                     }
                     
+                    // Development/Testing: Skip to next level
+                    Button("Skip Level") {
+                        engine.nextLevel()
+                        sceneUpdateTrigger += 1
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.orange)
+                    
                     Button("Reset Level", role: .destructive) {
                         engine.resetLevel()
                         sceneUpdateTrigger += 1
                     }
-                    
-                    NavigationLink(destination: TestView()) {
-                        Text("Test View")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
                 }
                 .padding(.bottom, 20)
             }
@@ -97,15 +122,26 @@ struct GameView: View {
         wordEntities.removeAll()
         slotEntities.removeAll()
         
-        // Create slot entities (drop targets) - arranged horizontally
-        let slotSpacing: Float = 0.15
-        let startX: Float = -Float(engine.currentSentence.count - 1) * slotSpacing / 2
+        // Create slot entities (drop targets) - arranged in a grid (max 4 per row)
+        let slotsPerRow: Int = 4
+        let slotSpacingX: Float = 0.15
+        let slotSpacingY: Float = -0.08  // Vertical spacing between rows
+        let totalSlots = engine.currentSentence.count
         
         for (index, _) in engine.currentSentence.enumerated() {
             let slotEntity = createSlotEntity(index: index)
+            
+            // Calculate row and column
+            let row = index / slotsPerRow
+            let col = index % slotsPerRow
+            
+            // Calculate position for this row
+            let slotsInRow = min(slotsPerRow, totalSlots - row * slotsPerRow)
+            let startX: Float = -Float(slotsInRow - 1) * slotSpacingX / 2
+            
             slotEntity.position = SIMD3<Float>(
-                startX + Float(index) * slotSpacing,
-                0.1,
+                startX + Float(col) * slotSpacingX,
+                0.1 + Float(row) * slotSpacingY,
                 0.0  // Move closer to camera
             )
             slotEntities[index] = slotEntity
