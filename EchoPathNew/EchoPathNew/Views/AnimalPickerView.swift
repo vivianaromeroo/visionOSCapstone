@@ -62,7 +62,6 @@ struct AnimalPickerView: View {
                 .padding(.horizontal)
             }
             .padding()
-            .background(Color.gray.opacity(0.2))
             .cornerRadius(20)
         }
         .onDisappear {
