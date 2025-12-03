@@ -37,6 +37,10 @@ struct GameView: View {
     
     var body: some View {
         ZStack {
+            // Soft gradient background
+            LinearGradient.backgroundGradient
+                .ignoresSafeArea()
+            
             // RealityKit 3D Scene - Full screen, interactive
             RealityView { content in
                 setupScene(content: content)
@@ -56,35 +60,39 @@ struct GameView: View {
             
             // Unit/Lesson/Level title at top
             VStack {
-                VStack(spacing: 4) {
-                    Text(engine.unitName)
-                        .font(.headline)
-                        .foregroundColor(.white.opacity(0.8))
-                        .shadow(color: .black, radius: 2)
-                    
-                    Text("Lesson \(engine.currentLesson + 1): \(engine.currentLessonName)")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2)
-                    
-                    Text("Level \(engine.currentLevel + 1)")
-                        .font(.title3)
-                        .foregroundColor(.white.opacity(0.9))
-                        .shadow(color: .black, radius: 2)
+                // Title card with puzzle piece accent
+                HStack(spacing: 10) {
+                    VStack(spacing: 6) {
+                        Text(engine.unitName)
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundColor(.pastelPurple.opacity(0.9))
+                        
+                        Text("Lesson \(engine.currentLesson + 1): \(engine.currentLessonName)")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.pastelPurple)
+                        
+                        Text("Level \(engine.currentLevel + 1)")
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
+                            .foregroundColor(.pastelPurple.opacity(0.8))
+                    }
                 }
-                .padding(.top, 10)
+                .padding(20)
+                .background(Color.neutralBackground.opacity(0.9))
+                .cornerRadius(25)
+                .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
+                .padding(.top, 15)
                 .allowsHitTesting(false)
                 
                 Spacer()
                 
                 // Controls at bottom
-                HStack(spacing: 15) {
+                HStack(spacing: 12) {
                     if engine.currentStep == engine.currentSentence.count {
                         Button(nextButtonText) {
                             engine.nextLevel()
                             sceneUpdateTrigger += 1
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PastelPrimaryButtonStyle())
                     }
                     
                     // Development/Testing: Skip to next level
@@ -92,14 +100,18 @@ struct GameView: View {
                         engine.nextLevel()
                         sceneUpdateTrigger += 1
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.orange)
+                    .buttonStyle(PastelSecondaryButtonStyle(color: .pastelPink))
                     
-                    Button("Reset Level", role: .destructive) {
+                    Button("Reset Level") {
                         engine.resetLevel()
                         sceneUpdateTrigger += 1
                     }
+                    .buttonStyle(PastelSecondaryButtonStyle(color: .warmPink))
                 }
+                .padding(15)
+                .background(Color.neutralBackground.opacity(0.9))
+                .cornerRadius(25)
+                .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
                 .padding(.bottom, 20)
             }
         }

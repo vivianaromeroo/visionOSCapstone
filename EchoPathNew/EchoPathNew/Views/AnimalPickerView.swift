@@ -22,47 +22,65 @@ struct AnimalPickerView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Text("What is your favorite animal?")
-                    .font(.extraLargeTitle2)
-                    .padding()
+            ZStack {
+                // Soft gradient background
+                LinearGradient.backgroundGradient
+                    .ignoresSafeArea()
                 
-                RealityView { content in
-                    content.add(rootEntity)
+                VStack(spacing: 25) {
+                    // Title with puzzle pieces
+                    Text("What is your favorite animal?")
+                        .pastelTitle()
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 20)
                     
-                    Task {
-                        await loadModel(named: selectedAnimal)
-                        startSpinning()
+                    Spacer()
+                    
+                    // 3D Model in card
+                    RealityView { content in
+                        content.add(rootEntity)
+                        
+                        Task {
+                            await loadModel(named: selectedAnimal)
+                            startSpinning()
+                        }
+                    } update: { [selectedAnimal] content in
+                        Task {
+                            await loadModel(named: selectedAnimal)
+                        }
                     }
-                } update: { [selectedAnimal] content in
-                    Task {
-                        await loadModel(named: selectedAnimal)
+                    .frame(width: 450, height: 350)
+                    .cornerRadius(30)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 30)
+                            .stroke(Color.red, lineWidth: 3)
+                    )
+                    
+                    // Picker styled
+                    Picker("Animal", selection: $selectedAnimal) {
+                        ForEach(animals, id: \.self) { animal in
+                            Text(animal)
+                                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        }
                     }
-                }
-                .frame(width: 200, height: 350)
-                
-                Picker("Animal", selection: $selectedAnimal) {
-                    ForEach(animals, id: \.self) { animal in
-                        Text(animal)
-                            .font(.largeTitle)
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 20)
+                    .frame(height: 50)
+                    .cornerRadius(25)
+                    
+                    // Continue button
+                    NavigationLink(destination: GameView(animal: selectedAnimal)) {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(PastelPrimaryButtonStyle())
+                    .padding(.horizontal, 40)
+                    
+                    Spacer()
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding()
-                .frame(height: 60)
-                
-                NavigationLink(destination: GameView(animal: selectedAnimal)) {
-                    Text("Continue")
-                        .font(.headline)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
+                .padding(.horizontal, 30)
+                .padding(.vertical, 20)
             }
-            .padding()
-            .cornerRadius(20)
         }
         .onDisappear {
             spinningTimer?.invalidate()
@@ -75,11 +93,21 @@ struct AnimalPickerView: View {
         do {
             let modelEntity = try await ModelEntity(named: "\(name).usdz")
             
-            modelEntity.position = SIMD3(0, -0.1, -0.1)
+            // 1. Scale to a reasonable size
             let bounds = modelEntity.visualBounds(relativeTo: nil)
             let maxDimension = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
             let scaleFactor = 0.15 / maxDimension
             modelEntity.scale = SIMD3(repeating: scaleFactor)
+            
+            // 2. Recenter the model so its center is at (0,0,0),
+            //    then nudge it upward slightly so it appears higher in the card
+            let centeredY: Float = -bounds.center.y * scaleFactor + 0
+            
+            modelEntity.position = SIMD3(
+                -bounds.center.x * scaleFactor,
+                centeredY,
+                -bounds.center.z * scaleFactor
+            )
             
             rootEntity.addChild(modelEntity)
         } catch {

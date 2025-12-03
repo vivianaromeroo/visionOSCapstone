@@ -20,79 +20,74 @@ struct LoginView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 30) {
-                // Title
-                Text("Login")
-                    .font(.system(size: 48, weight: .bold))
-                    .foregroundColor(.primary)
+            ZStack {
+                // Soft gradient background
+                LinearGradient.backgroundGradient
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    // Title with puzzle piece accent
+                    HStack(spacing: 15) {
+                        Text("Login")
+                            .pastelTitle()
+                    }
                     .padding(.top, 60)
-                
-                Spacer()
-                
-                // Input fields
-                VStack(spacing: 25) {
-                    // First field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Enter Numbers")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        
-                        TextField("", text: $field1)
-                            .textFieldStyle(.plain)
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(10)
-                            .keyboardType(.numberPad)
-                            .focused($focusedField, equals: .field1)
-                            .frame(height: 60)
-                            .font(.system(size: 24))
-                    }
                     
-                    // Second field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Enter Numbers")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.secondary)
+                    Spacer()
+                    
+                    // Input fields in pastel card
+                    VStack(spacing: 25) {
+                        // First field
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Enter Numbers")
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .foregroundColor(.pastelPurple)
+                            
+                            TextField("", text: $field1)
+                                .textFieldStyle(PastelTextFieldStyle())
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .field1)
+                                .frame(height: 60)
+                                .font(.system(size: 20, design: .rounded))
+                        }
                         
-                        TextField("", text: $field2)
-                            .textFieldStyle(.plain)
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(10)
-                            .keyboardType(.numberPad)
-                            .focused($focusedField, equals: .field2)
-                            .frame(height: 60)
-                            .font(.system(size: 24))
+                        // Second field
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Enter Numbers")
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .foregroundColor(.pastelPurple)
+                            
+                            TextField("", text: $field2)
+                                .textFieldStyle(PastelTextFieldStyle())
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .field2)
+                                .frame(height: 60)
+                                .font(.system(size: 20, design: .rounded))
+                        }
+                    }
+                    .padding(.horizontal, 40)
+                    
+                    // Login button
+                    Button(action: handleLogin) {
+                        Text("Login")
+                            .frame(maxWidth: .infinity)
+                            .disabled(!canLogin)
+                    }
+                    .buttonStyle(PastelPrimaryButtonStyle(isEnabled: canLogin))
+                    .padding(.horizontal, 40)
+                    .padding(.top, 10)
+                    
+                    Spacer()
+                    
+                    // Status message
+                    if !field1.isEmpty || !field2.isEmpty {
+                        Text("Enter numbers to login")
+                            .pastelBody()
+                            .padding(.bottom, 40)
                     }
                 }
-                .padding(.horizontal, 40)
-                
-                // Login button
-                Button(action: handleLogin) {
-                    Text("Login")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .disabled(!canLogin)
-                }
-                .buttonStyle(.plain)
-                .background(canLogin ? Color.accentColor : Color.gray)
-                .cornerRadius(10)
-                .padding(.horizontal, 40)
-                .padding(.top, 20)
-                
-                Spacer()
-                
-                // Status message
-                if !field1.isEmpty || !field2.isEmpty {
-                    Text("Enter numbers to login")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 40)
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationDestination(isPresented: $isAuthenticated) {
                 AnimalPickerView()
             }
