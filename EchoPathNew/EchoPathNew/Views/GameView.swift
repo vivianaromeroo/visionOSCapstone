@@ -177,14 +177,25 @@ struct GameView: View {
         let parent = Entity()
         parent.name = "Slot_\(index)"
         
-        // Create box for slot
+        // Create box for slot - all slots have the same color
         let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.01])
-        let isActive = index == engine.currentStep
-        let slotColor: UIColor = isActive ? .blue : .systemPurple
-        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.4), isMetallic: false)
+        let slotColor: UIColor = Color.lavender.uiColor
+        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.7), isMetallic: false)
         let box = ModelEntity(mesh: boxMesh, materials: [material])
         box.generateCollisionShapes(recursive: true)
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))
+        box.name = "SlotBox_\(index)"
+        
+        // Add white outline for active slot
+        let isActive = index == engine.currentStep
+        if isActive {
+            let outlineMesh = MeshResource.generateBox(size: [0.125, 0.065, 0.011]) // Slightly larger
+            let outlineMaterial = SimpleMaterial(color: .white, isMetallic: false)
+            let outlineBox = ModelEntity(mesh: outlineMesh, materials: [outlineMaterial])
+            outlineBox.position = SIMD3<Float>(0, 0, -0.0005) // Behind the main box
+            outlineBox.name = "SlotOutline_\(index)"
+            parent.addChild(outlineBox)
+        }
         
         // Create text for slot (only show word if dropped, no hints)
         if let droppedWord = engine.droppedWords[index] {
@@ -350,13 +361,31 @@ struct GameView: View {
     }
     
     private func updateSlotAppearance() {
-        // Update slot colors and text based on current step and dropped words
+        // Update slot outlines and text based on current step and dropped words
         for (index, slotEntity) in slotEntities {
-            // Update box color - find the box child (first child that's a ModelEntity)
-            if let box = slotEntity.children.first(where: { $0 is ModelEntity && $0.name.isEmpty }) as? ModelEntity {
-                let isActive = index == engine.currentStep
-                let slotColor: UIColor = isActive ? .blue : .gray
-                let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.3), isMetallic: false)
+            let isActive = index == engine.currentStep
+            
+            // Update outline - add or remove white outline for active slot
+            let outlineName = "SlotOutline_\(index)"
+            if let existingOutline = slotEntity.children.first(where: { $0.name == outlineName }) {
+                if !isActive {
+                    // Remove outline if slot is no longer active
+                    existingOutline.removeFromParent()
+                }
+            } else if isActive {
+                // Add outline if slot is now active
+                let outlineMesh = MeshResource.generateBox(size: [0.125, 0.065, 0.011])
+                let outlineMaterial = SimpleMaterial(color: .white, isMetallic: false)
+                let outlineBox = ModelEntity(mesh: outlineMesh, materials: [outlineMaterial])
+                outlineBox.position = SIMD3<Float>(0, 0, -0.0005)
+                outlineBox.name = outlineName
+                slotEntity.addChild(outlineBox)
+            }
+            
+            // Keep box color consistent (no color change based on active state)
+            if let box = slotEntity.children.first(where: { $0.name == "SlotBox_\(index)" }) as? ModelEntity {
+                let slotColor: UIColor = Color.lavender.uiColor
+                let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.4), isMetallic: false)
                 box.model?.materials = [material]
             }
             

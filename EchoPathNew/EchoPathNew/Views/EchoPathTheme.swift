@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Color Palette Extension
 extension Color {
@@ -40,6 +41,11 @@ extension Color {
             blue: Double(b) / 255,
             opacity: Double(a) / 255
         )
+    }
+    
+    // Helper to convert SwiftUI Color to UIColor for RealityKit
+    var uiColor: UIColor {
+        UIColor(self)
     }
 }
 
