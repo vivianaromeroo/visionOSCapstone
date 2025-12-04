@@ -8,9 +8,13 @@
 import SwiftUI
 
 struct LoginView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var field1: String = ""
     @State private var field2: Date = Date()
     @State private var isAuthenticated: Bool = false
+    @State private var isLoading: Bool = false
+    @State private var errorMessage: String?
+    @State private var showTutorial: Bool = false
     @FocusState private var focusedField: Field?
     
     enum Field {
@@ -30,7 +34,7 @@ struct LoginView: View {
                         Text("Login")
                             .pastelTitle()
                     }
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 10)
                     
                     // Input fields in pastel card
                     VStack(spacing: 25) {
@@ -43,7 +47,8 @@ struct LoginView: View {
                             
                             TextField("", text: $field1)
                                 .textFieldStyle(PastelTextFieldStyle())
-                                .keyboardType(.numberPad)
+                                .keyboardType(.default)
+                                .autocapitalization(.allCharacters)
                                 .focused($focusedField, equals: .field1)
                                 .foregroundColor(.black)
                                 .frame(width: 350, height: 70)
@@ -69,21 +74,43 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 40)
                     
+                    // Tutorial checkbox
+                    Toggle(isOn: $showTutorial) {
+                        Text("Play tutorial")
+                            .font(.system(size: 28, weight: .medium, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: .pastelPurple))
+                    .padding(.horizontal, 525)
+                    .padding(.top, 10)
+                    
                     // Login button
                     Button(action: handleLogin) {
-                        Text("Login")
-                            .frame(maxWidth: .infinity)
-                            .disabled(!canLogin)
-                            .font(.system(size: 35))
+                        HStack {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text("Login")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .disabled(!canLogin || isLoading)
+                        .font(.system(size: 35))
                     }
                     .buttonStyle(PastelPrimaryButtonStyle())
                     .padding(.horizontal, 40)
-                    .padding(.top, 20)
+                    .padding(.top, 10)
                     
                     Spacer()
                     
                     // Status message
-                    if !field1.isEmpty {
+                    if let errorMessage = errorMessage {
+                        Text(errorMessage)
+                            .pastelBody()
+                            .foregroundColor(.red)
+                            .padding(.bottom, 40)
+                    } else if !field1.isEmpty && !isLoading {
                         Text("Enter ID and select date to login")
                             .pastelBody()
                             .padding(.bottom, 40)
@@ -102,14 +129,43 @@ struct LoginView: View {
     }
     
     private func handleLogin() {
-        // Handle login logic here
-        // Navigate to AnimalPickerView
-        // You can add actual authentication logic here later
-        isAuthenticated = true
+        // Reset error message
+        errorMessage = nil
+        isLoading = true
+        
+        Task {
+            do {
+                let response = try await AuthService.shared.login(
+                    shortId: field1.trimmingCharacters(in: .whitespacesAndNewlines),
+                    dateOfBirth: field2
+                )
+                
+                // Store user data in AppModel
+                appModel.child = response.child
+                appModel.preferences = response.preferences
+                appModel.welcomeMessage = response.message
+                
+                // Navigate to AnimalPickerView on success
+                await MainActor.run {
+                    isLoading = false
+                    isAuthenticated = true
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    if let authError = error as? AuthError {
+                        errorMessage = authError.errorDescription ?? "Login failed"
+                    } else {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
     }
 }
 
 #Preview(windowStyle: .automatic) {
     LoginView()
+        .environment(AppModel())
 }
 

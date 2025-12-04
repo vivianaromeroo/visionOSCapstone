@@ -18,4 +18,9 @@ class AppModel {
         case open
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
+    
+    // User data
+    var child: Child?
+    var preferences: Preferences?
+    var welcomeMessage: String?
 }
