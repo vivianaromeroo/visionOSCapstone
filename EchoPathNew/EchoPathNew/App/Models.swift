@@ -51,6 +51,16 @@ struct LoginResponse: Codable {
     let child: Child
     let preferences: Preferences
     let message: String
+    let unitName: String?
+    let lessonName: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case child
+        case preferences
+        case message
+        case unitName = "unit_name"
+        case lessonName = "lesson_name"
+    }
 }
 
 // MARK: - API Request Models

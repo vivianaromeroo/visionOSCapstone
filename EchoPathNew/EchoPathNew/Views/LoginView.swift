@@ -119,7 +119,7 @@ struct LoginView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationDestination(isPresented: $isAuthenticated) {
-                AnimalPickerView()
+                WelcomeView()
             }
         }
     }
@@ -143,7 +143,9 @@ struct LoginView: View {
                 // Store user data in AppModel
                 appModel.child = response.child
                 appModel.preferences = response.preferences
-                appModel.welcomeMessage = response.message
+                appModel.welcomeMessage = "Welcome back! Today's lesson is..."
+                appModel.unitName = "My Animal Friend"
+                appModel.lessonName = "Basic Actions"
                 
                 // Navigate to AnimalPickerView on success
                 await MainActor.run {

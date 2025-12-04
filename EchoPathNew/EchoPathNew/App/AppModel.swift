@@ -23,4 +23,6 @@ class AppModel {
     var child: Child?
     var preferences: Preferences?
     var welcomeMessage: String?
+    var unitName: String?
+    var lessonName: String?
 }
