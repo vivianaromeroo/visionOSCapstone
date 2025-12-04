@@ -31,38 +31,41 @@ struct LoginView: View {
                         Text("Login")
                             .pastelTitle()
                     }
-                    .padding(.top, 60)
                     
-                    Spacer()
+                    HStack(spacing: 15) {
+                        Text("Sign in to begin today’s session")
+                            .pastelSubtitle()
+                    }
+                    .padding(.bottom, 20)
                     
                     // Input fields in pastel card
                     VStack(spacing: 25) {
                         // First field
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Enter Numbers")
-                                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                                .foregroundColor(.pastelPurple)
+                            Text("Enter Child's ID")
+                                .font(.system(size: 35, weight: .semibold, design: .rounded))
+                                .foregroundColor(.lavender)
                             
                             TextField("", text: $field1)
                                 .textFieldStyle(PastelTextFieldStyle())
                                 .keyboardType(.numberPad)
                                 .focused($focusedField, equals: .field1)
-                                .frame(height: 60)
-                                .font(.system(size: 20, design: .rounded))
+                                .frame(height: 70)
+                                .font(.system(size: 30, design: .rounded))
                         }
                         
                         // Second field
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Enter Numbers")
-                                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                                .foregroundColor(.pastelPurple)
+                            Text("Enter Child's Date of Birth")
+                                .font(.system(size: 35, weight: .semibold, design: .rounded))
+                                .foregroundColor(.lavender)
                             
                             TextField("", text: $field2)
                                 .textFieldStyle(PastelTextFieldStyle())
                                 .keyboardType(.numberPad)
                                 .focused($focusedField, equals: .field2)
-                                .frame(height: 60)
-                                .font(.system(size: 20, design: .rounded))
+                                .frame(height: 70)
+                                .font(.system(size: 30, design: .rounded))
                         }
                     }
                     .padding(.horizontal, 40)
@@ -72,10 +75,11 @@ struct LoginView: View {
                         Text("Login")
                             .frame(maxWidth: .infinity)
                             .disabled(!canLogin)
+                            .font(.system(size: 35))
                     }
-                    .buttonStyle(PastelPrimaryButtonStyle(isEnabled: canLogin))
+                    .buttonStyle(PastelPrimaryButtonStyle())
                     .padding(.horizontal, 40)
-                    .padding(.top, 10)
+                    .padding(.top, 20)
                     
                     Spacer()
                     

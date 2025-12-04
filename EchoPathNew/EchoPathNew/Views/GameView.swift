@@ -37,10 +37,6 @@ struct GameView: View {
     
     var body: some View {
         ZStack {
-            // Soft gradient background
-            LinearGradient.backgroundGradient
-                .ignoresSafeArea()
-            
             // RealityKit 3D Scene - Full screen, interactive
             RealityView { content in
                 setupScene(content: content)
@@ -184,8 +180,8 @@ struct GameView: View {
         // Create box for slot
         let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.01])
         let isActive = index == engine.currentStep
-        let slotColor: UIColor = isActive ? .blue : .gray
-        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.3), isMetallic: false)
+        let slotColor: UIColor = isActive ? .blue : .systemPurple
+        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.4), isMetallic: false)
         let box = ModelEntity(mesh: boxMesh, materials: [material])
         box.generateCollisionShapes(recursive: true)
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))

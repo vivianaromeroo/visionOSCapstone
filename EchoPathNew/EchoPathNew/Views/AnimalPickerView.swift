@@ -32,7 +32,6 @@ struct AnimalPickerView: View {
                     Text("What is your favorite animal?")
                         .pastelTitle()
                         .multilineTextAlignment(.center)
-                        .padding(.top, 20)
                     
                     Spacer()
                     
@@ -49,18 +48,14 @@ struct AnimalPickerView: View {
                             await loadModel(named: selectedAnimal)
                         }
                     }
-                    .frame(width: 450, height: 350)
+                    .frame(width: 450, height: 300)
                     .cornerRadius(30)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 30)
-                            .stroke(Color.red, lineWidth: 3)
-                    )
                     
                     // Picker styled
                     Picker("Animal", selection: $selectedAnimal) {
                         ForEach(animals, id: \.self) { animal in
                             Text(animal)
-                                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                                .font(.system(size: 30, weight: .semibold, design: .rounded))
                         }
                     }
                     .pickerStyle(.segmented)
@@ -72,6 +67,7 @@ struct AnimalPickerView: View {
                     NavigationLink(destination: GameView(animal: selectedAnimal)) {
                         Text("Continue")
                             .frame(maxWidth: .infinity)
+                            .font(.system(size: 35))
                     }
                     .buttonStyle(PastelPrimaryButtonStyle())
                     .padding(.horizontal, 40)

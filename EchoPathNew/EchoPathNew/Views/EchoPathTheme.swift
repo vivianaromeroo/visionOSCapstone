@@ -130,14 +130,14 @@ extension View {
 extension Text {
     func pastelTitle() -> some View {
         self
-            .font(.system(size: 36, weight: .bold, design: .rounded))
-            .foregroundColor(.pastelPurple)
+            .font(.system(size: 66, weight: .bold, design: .rounded))
+            .foregroundColor(.lavender)
     }
     
     func pastelSubtitle() -> some View {
         self
-            .font(.system(size: 24, weight: .semibold, design: .rounded))
-            .foregroundColor(.pastelPurple.opacity(0.8))
+            .font(.system(size: 35, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.8))
     }
     
     func pastelBody() -> some View {
