@@ -19,6 +19,10 @@ struct GameView: View {
     @State private var draggedEntity: Entity? = nil
     @State private var originalPosition: SIMD3<Float>? = nil
     @State private var sceneUpdateTrigger: Int = 0
+    @State private var showLessonComplete: Bool = false
+    @State private var completedLessonIndex: Int = 0
+    @State private var hasNextLessonAvailable: Bool = false
+    @Environment(\.dismiss) private var dismiss
     
     init(animal: String) {
         _engine = State(wrappedValue: GameEngine(animal: animal))
@@ -54,61 +58,79 @@ struct GameView: View {
                     }
             )
             
-            // Unit/Lesson/Level title at top
-            VStack {
-                // Title card with puzzle piece accent
-                HStack(spacing: 10) {
-                    VStack(spacing: 6) {
-                        Text(engine.unitName)
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundColor(.pastelPurple.opacity(0.9))
-                        
-                        Text("Lesson \(engine.currentLesson + 1): \(engine.currentLessonName)")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.pastelPurple)
-                        
-                        Text("Level \(engine.currentLevel + 1)")
-                            .font(.system(size: 18, weight: .medium, design: .rounded))
-                            .foregroundColor(.pastelPurple.opacity(0.8))
+            // Unit/Lesson/Level title at top and Controls at bottom (hidden when lesson complete)
+            if !showLessonComplete {
+                VStack {
+                    // Title card with puzzle piece accent
+                    HStack(spacing: 10) {
+                        VStack(spacing: 6) {
+                            Text(engine.unitName)
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(.pastelPurple.opacity(0.9))
+                            
+                            Text("Lesson \(engine.currentLesson + 1): \(engine.currentLessonName)")
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .foregroundColor(.pastelPurple)
+                            
+                            Text("Level \(engine.currentLevel + 1)")
+                                .font(.system(size: 18, weight: .medium, design: .rounded))
+                                .foregroundColor(.pastelPurple.opacity(0.8))
+                        }
                     }
-                }
-                .padding(20)
-                .background(Color.neutralBackground.opacity(0.9))
-                .cornerRadius(25)
-                .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
-                .padding(.top, 15)
-                .allowsHitTesting(false)
-                
-                Spacer()
-                
-                // Controls at bottom
-                HStack(spacing: 12) {
-                    if engine.currentStep == engine.currentSentence.count {
-                        Button(nextButtonText) {
-                            engine.nextLevel()
+                    .padding(20)
+                    .background(Color.neutralBackground.opacity(0.9))
+                    .cornerRadius(25)
+                    .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
+                    .padding(.top, 15)
+                    .allowsHitTesting(false)
+                    
+                    Spacer()
+                    
+                    // Controls at bottom
+                    HStack(spacing: 12) {
+                        if engine.currentStep == engine.currentSentence.count {
+                            Button(nextButtonText) {
+                                handleNextButton()
+                            }
+                            .buttonStyle(PastelPrimaryButtonStyle())
+                        }
+                        
+                        // Development/Testing: Skip to next level
+                        Button("Skip Level") {
+                            handleSkipLevel()
+                        }
+                        .buttonStyle(PastelSecondaryButtonStyle(color: .pastelPink))
+                        
+                        Button("Reset Level") {
+                            engine.resetLevel()
                             sceneUpdateTrigger += 1
                         }
-                        .buttonStyle(PastelPrimaryButtonStyle())
+                        .buttonStyle(PastelSecondaryButtonStyle(color: .warmPink))
                     }
-                    
-                    // Development/Testing: Skip to next level
-                    Button("Skip Level") {
+                    .padding(15)
+                    .background(Color.neutralBackground.opacity(0.9))
+                    .cornerRadius(25)
+                    .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
+                    .padding(.bottom, 20)
+                }
+            }
+            
+            // Lesson Complete Overlay
+            if showLessonComplete {
+                LessonCompleteView(
+                    lessonName: engine.lessonNames[completedLessonIndex],
+                    hasNextLesson: hasNextLessonAvailable,
+                    onContinue: {
+                        showLessonComplete = false
                         engine.nextLevel()
                         sceneUpdateTrigger += 1
+                    },
+                    onExit: {
+                        // Navigate back to title screen (ContentView)
+                        // Dismiss will pop back through the navigation stack
+                        dismiss()
                     }
-                    .buttonStyle(PastelSecondaryButtonStyle(color: .pastelPink))
-                    
-                    Button("Reset Level") {
-                        engine.resetLevel()
-                        sceneUpdateTrigger += 1
-                    }
-                    .buttonStyle(PastelSecondaryButtonStyle(color: .warmPink))
-                }
-                .padding(15)
-                .background(Color.neutralBackground.opacity(0.9))
-                .cornerRadius(25)
-                .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 6)
-                .padding(.bottom, 20)
+                )
             }
         }
         .navigationTitle("Sentence Builder")
@@ -120,6 +142,37 @@ struct GameView: View {
         }
         .onChange(of: engine.currentStep) { _, _ in
             updateSlotAppearance()
+        }
+    }
+    
+    // MARK: - Navigation Handlers
+    private func handleNextButton() {
+        // Check if we're completing a lesson (on last level of current lesson)
+        if engine.isLastLevelInLesson {
+            // Show lesson completion screen
+            completedLessonIndex = engine.currentLesson
+            // Check if there's a next lesson available (not the last lesson in unit)
+            hasNextLessonAvailable = !engine.isLastLessonInUnit
+            showLessonComplete = true
+        } else {
+            // Just moving to next level within the same lesson
+            engine.nextLevel()
+            sceneUpdateTrigger += 1
+        }
+    }
+    
+    private func handleSkipLevel() {
+        // Check if we're completing a lesson (on last level of current lesson)
+        if engine.isLastLevelInLesson {
+            // Show lesson completion screen
+            completedLessonIndex = engine.currentLesson
+            // Check if there's a next lesson available (not the last lesson in unit)
+            hasNextLessonAvailable = !engine.isLastLessonInUnit
+            showLessonComplete = true
+        } else {
+            // Just moving to next level within the same lesson
+            engine.nextLevel()
+            sceneUpdateTrigger += 1
         }
     }
     

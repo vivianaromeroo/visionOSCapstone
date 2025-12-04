@@ -64,7 +64,7 @@ extension LinearGradient {
     )
     
     static let backgroundGradient = LinearGradient(
-        colors: [Color.skyBlue.opacity(0.3), Color.lavender.opacity(0.3)],
+        colors: [Color.skyBlue.opacity(0.5), Color.lavender.opacity(0.5)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
