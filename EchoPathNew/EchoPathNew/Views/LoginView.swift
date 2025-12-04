@@ -9,13 +9,12 @@ import SwiftUI
 
 struct LoginView: View {
     @State private var field1: String = ""
-    @State private var field2: String = ""
+    @State private var field2: Date = Date()
     @State private var isAuthenticated: Bool = false
     @FocusState private var focusedField: Field?
     
     enum Field {
         case field1
-        case field2
     }
     
     var body: some View {
@@ -31,41 +30,41 @@ struct LoginView: View {
                         Text("Login")
                             .pastelTitle()
                     }
-                    
-                    HStack(spacing: 15) {
-                        Text("Sign in to begin today’s session")
-                            .pastelSubtitle()
-                    }
                     .padding(.bottom, 20)
                     
                     // Input fields in pastel card
                     VStack(spacing: 25) {
                         // First field
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .center, spacing: 12) {
                             Text("Enter Child's ID")
                                 .font(.system(size: 35, weight: .semibold, design: .rounded))
                                 .foregroundColor(.lavender)
+                                .padding(.bottom, 5)
                             
                             TextField("", text: $field1)
                                 .textFieldStyle(PastelTextFieldStyle())
                                 .keyboardType(.numberPad)
                                 .focused($focusedField, equals: .field1)
-                                .frame(height: 70)
+                                .foregroundColor(.black)
+                                .frame(width: 350, height: 70)
                                 .font(.system(size: 30, design: .rounded))
+                                .padding(.bottom, 10)
                         }
                         
                         // Second field
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .center, spacing: 12) {
                             Text("Enter Child's Date of Birth")
                                 .font(.system(size: 35, weight: .semibold, design: .rounded))
                                 .foregroundColor(.lavender)
+                                .padding(.bottom, 5)
                             
-                            TextField("", text: $field2)
-                                .textFieldStyle(PastelTextFieldStyle())
-                                .keyboardType(.numberPad)
-                                .focused($focusedField, equals: .field2)
+                            DatePicker("", selection: $field2, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
                                 .frame(height: 70)
                                 .font(.system(size: 30, design: .rounded))
+                                .scaleEffect(1.6)
+                                .accentColor(.white)
                         }
                     }
                     .padding(.horizontal, 40)
@@ -84,8 +83,8 @@ struct LoginView: View {
                     Spacer()
                     
                     // Status message
-                    if !field1.isEmpty || !field2.isEmpty {
-                        Text("Enter numbers to login")
+                    if !field1.isEmpty {
+                        Text("Enter ID and select date to login")
                             .pastelBody()
                             .padding(.bottom, 40)
                     }
@@ -99,14 +98,11 @@ struct LoginView: View {
     }
     
     private var canLogin: Bool {
-        !field1.isEmpty && !field2.isEmpty
+        !field1.isEmpty
     }
     
     private func handleLogin() {
         // Handle login logic here
-        print("Field 1: \(field1)")
-        print("Field 2: \(field2)")
-        
         // Navigate to AnimalPickerView
         // You can add actual authentication logic here later
         isAuthenticated = true

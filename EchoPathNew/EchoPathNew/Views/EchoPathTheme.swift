@@ -137,7 +137,7 @@ extension Text {
     func pastelTitle() -> some View {
         self
             .font(.system(size: 66, weight: .bold, design: .rounded))
-            .foregroundColor(.lavender)
+            .foregroundColor(.white)
     }
     
     func pastelSubtitle() -> some View {
