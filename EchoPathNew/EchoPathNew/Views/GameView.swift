@@ -316,12 +316,20 @@ struct GameView: View {
         
         // Animal root entity is already created and added in RealityView closure
         // Create slot entities (drop targets) - arranged in a grid (max 4 per row)
+        
+        // Safety check: ensure sentence is valid before accessing
+        let currentSentence = engine.currentSentence
+        guard !currentSentence.isEmpty else {
+            print("⚠️ Warning: Empty sentence in setupScene, skipping slot creation")
+            return
+        }
+        
         let slotsPerRow: Int = 4
         let slotSpacingX: Float = 0.15
         let slotSpacingY: Float = -0.08  // Vertical spacing between rows
-        let totalSlots = engine.currentSentence.count
+        let totalSlots = currentSentence.count
         
-        for (index, _) in engine.currentSentence.enumerated() {
+        for (index, _) in currentSentence.enumerated() {
             let slotEntity = createSlotEntity(index: index)
             
             // Calculate row and column
@@ -342,10 +350,18 @@ struct GameView: View {
         }
         
         // Create word entities (draggable) - arranged in a word bank
-        let wordSpacing: Float = 0.12
-        let wordStartX: Float = -Float(engine.availableWords.count - 1) * wordSpacing / 2
+        let availableWords = engine.availableWords
         
-        for (wordIndex, word) in engine.availableWords.enumerated() {
+        // Safety check: ensure available words are valid before accessing
+        guard !availableWords.isEmpty else {
+            print("⚠️ Warning: Empty availableWords in setupScene, skipping word creation")
+            return
+        }
+        
+        let wordSpacing: Float = 0.12
+        let wordStartX: Float = -Float(availableWords.count - 1) * wordSpacing / 2
+        
+        for (wordIndex, word) in availableWords.enumerated() {
             let wordEntity = createWordEntity(word: word)
             wordEntity.position = SIMD3<Float>(
                 wordStartX + Float(wordIndex) * wordSpacing,
@@ -420,7 +436,9 @@ struct GameView: View {
         box.name = "SlotBox_\(index)"
         
         // Create text for slot (only show word if dropped, no hints)
-        if let droppedWord = engine.droppedWords[index] {
+        // Safety check: ensure index is within bounds of droppedWords array
+        if index >= 0 && index < engine.droppedWords.count,
+           let droppedWord = engine.droppedWords[index] {
             let textMesh = MeshResource.generateText(
                 droppedWord,
                 extrusionDepth: 0.002,
@@ -523,37 +541,54 @@ struct GameView: View {
             return
         }
         
-        // Check if dropped near any slot
         // Use a common coordinate space - the entity's parent or the entity itself
         let coordinateSpace = draggedEntity.parent ?? draggedEntity
         let dragPosition = value.convert(value.location3D, from: .local, to: coordinateSpace)
-        var wasDropped = false
+        
+        // Find the closest slot by X/Z distance (ignore Y axis)
+        var closestSlotIndex: Int? = nil
+        var closestDistance: Float = Float.greatestFiniteMagnitude
+        var closestSlotPosition: SIMD3<Float>? = nil
+        let threshold: Float = 0.28 // More generous threshold (0.25-0.30 range)
         
         for (index, slotEntity) in slotEntities {
             let slotPosition = slotEntity.position(relativeTo: coordinateSpace)
             
-            let distance = length(dragPosition - slotPosition)
-            let threshold: Float = 0.15 // Distance threshold for "dropped on"
+            // Calculate X/Z distance only (ignore Y axis)
+            let dx = dragPosition.x - slotPosition.x
+            let dz = dragPosition.z - slotPosition.z
+            let xzDistance = sqrt(dx * dx + dz * dz)
             
-            if distance < threshold {
-                // Word is dropped on this slot
-                let wasInAvailable = engine.availableWords.contains(word)
-                engine.handleDrop(word, at: index)
-                // If word was correctly placed, it will be removed from availableWords
-                if !engine.availableWords.contains(word) && wasInAvailable {
-                    // Remove word entity from scene immediately
-                    draggedEntity.removeFromParent()
-                    wordEntities.removeValue(forKey: word)
-                }
-                wasDropped = true
-                sceneUpdateTrigger += 1
-                break
+            if xzDistance < threshold && xzDistance < closestDistance {
+                closestDistance = xzDistance
+                closestSlotIndex = index
+                closestSlotPosition = slotPosition
             }
         }
         
-        // If not dropped on a slot, return to original position
-        if !wasDropped, let originalPos = originalPosition {
-            draggedEntity.position = originalPos
+        // If a slot is close enough, snap to it and handle the drop
+        if let slotIndex = closestSlotIndex,
+           let slotPosition = closestSlotPosition {
+            // Snap the dragged entity to the exact slot position
+            draggedEntity.position = slotPosition
+            
+            // Handle the drop
+            let wasInAvailable = engine.availableWords.contains(word)
+            engine.handleDrop(word, at: slotIndex)
+            
+            // If word was correctly placed, it will be removed from availableWords
+            if !engine.availableWords.contains(word) && wasInAvailable {
+                // Remove word entity from scene immediately
+                draggedEntity.removeFromParent()
+                wordEntities.removeValue(forKey: word)
+            }
+            
+            sceneUpdateTrigger += 1
+        } else {
+            // No slot is close enough, return to original position
+            if let originalPos = originalPosition {
+                draggedEntity.position = originalPos
+            }
         }
         
         resetDragState()
@@ -595,6 +630,15 @@ struct GameView: View {
             }
             
             // Update text - only show if word is dropped
+            // Safety check: ensure index is within bounds of droppedWords array
+            guard index >= 0 && index < engine.droppedWords.count else {
+                // Index out of bounds - remove text if it exists and continue
+                if let textEntity = slotEntity.children.first(where: { $0.name == "SlotText_\(index)" }) {
+                    textEntity.removeFromParent()
+                }
+                continue
+            }
+            
             if let droppedWord = engine.droppedWords[index] {
                 // Check if text entity already exists
                 if let textEntity = slotEntity.children.first(where: { $0.name == "SlotText_\(index)" }) as? ModelEntity {
