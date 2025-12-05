@@ -27,7 +27,7 @@ struct LessonCompleteView: View {
                         .pastelTitle()
                         .multilineTextAlignment(.center)
                     
-                    Text("You completed\n\(lessonName)!")
+                    Text("You completed \(lessonName)!")
                         .pastelSubtitle()
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 60)

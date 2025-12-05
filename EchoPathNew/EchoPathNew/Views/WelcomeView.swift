@@ -60,7 +60,6 @@ struct WelcomeView: View {
                                 Text(unitName)
                                     .font(.system(size: 32, weight: .semibold, design: .rounded))
                                     .foregroundColor(.lavender)
-                                    .padding(.top, 20)
                             }
                         }
                         .padding(30)

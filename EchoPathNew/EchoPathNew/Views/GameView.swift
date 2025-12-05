@@ -22,9 +22,22 @@ struct GameView: View {
     @State private var showLessonComplete: Bool = false
     @State private var completedLessonIndex: Int = 0
     @State private var hasNextLessonAvailable: Bool = false
+    @State private var animalEntity: ModelEntity? = nil
+    @State private var animalRootEntity: Entity? = nil
+    @State private var animationTask: Task<Void, Never>? = nil
+    @State private var isAnimating: Bool = false
+    @State private var hasPlayedCompletionAnimation: Bool = false // Track if we've played animation for this level
     @Environment(\.dismiss) private var dismiss
     
+    private let animal: String
+    
+    // Computed property to check if sentence is complete
+    private var isSentenceComplete: Bool {
+        engine.currentStep == engine.currentSentence.count
+    }
+    
     init(animal: String) {
+        self.animal = animal
         _engine = State(wrappedValue: GameEngine(animal: animal))
     }
     
@@ -43,7 +56,34 @@ struct GameView: View {
         ZStack {
             // RealityKit 3D Scene - Full screen, interactive
             RealityView { content in
+                // Add animal root entity immediately (same pattern as AnimalPickerView)
+                if animalRootEntity == nil {
+                    let rootEntity = Entity()
+                    rootEntity.name = "AnimalRoot"
+                    // Set base rotation for side profile view (head toward right, feet down)
+                    rootEntity.transform.rotation = simd_quatf(angle: -.pi / 2, axis: SIMD3(0, 0.5, 0))
+                    // Set position - lower the animal (negative Y = down)
+                    rootEntity.position = SIMD3<Float>(0, -0.1, 0)
+                    // Hide animal initially - will be shown when lesson is complete
+                    rootEntity.scale = SIMD3(repeating: 0.0)
+                    animalRootEntity = rootEntity
+                    content.add(rootEntity)
+                    
+                    // Load model in task
+                    Task {
+                        await loadAnimalModel()
+                    }
+                } else if let existingRoot = animalRootEntity {
+                    content.add(existingRoot)
+                }
+                
                 setupScene(content: content)
+            } update: { content in
+                // Ensure animal is still in content when scene updates
+                if let animalRoot = animalRootEntity, animalRoot.parent == nil {
+                    content.add(animalRoot)
+                }
+                // Don't trigger animation here - it's handled by onChange modifiers
             }
             .id(sceneUpdateTrigger) // Force re-render when trigger changes
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -122,6 +162,13 @@ struct GameView: View {
                     hasNextLesson: hasNextLessonAvailable,
                     onContinue: {
                         showLessonComplete = false
+                        // Reset animal orientation before continuing to next lesson
+                        animationTask?.cancel()
+                        isAnimating = false
+                        // Reset completion animation flag for the new lesson
+                        hasPlayedCompletionAnimation = false
+                        // Hide animal - will appear again when new lesson is complete
+                        hideAnimal()
                         engine.nextLevel()
                         sceneUpdateTrigger += 1
                     },
@@ -135,13 +182,49 @@ struct GameView: View {
         }
         .navigationTitle("Sentence Builder")
         .onChange(of: engine.availableWords) { _, _ in
+            // Update word entities without recreating entire scene
             sceneUpdateTrigger += 1
         }
         .onChange(of: engine.droppedWords) { _, _ in
+            // Update slot appearance without recreating entire scene
             sceneUpdateTrigger += 1
         }
-        .onChange(of: engine.currentStep) { _, _ in
+        .onChange(of: engine.currentStep) { oldStep, newStep in
             updateSlotAppearance()
+            
+            // Check if sentence is now complete and we haven't played animation yet
+            if isSentenceComplete && !hasPlayedCompletionAnimation && !showLessonComplete {
+                // Play animation when sentence is completed
+                hasPlayedCompletionAnimation = true
+                Task {
+                    // First, make the animal visible
+                    await showAnimal()
+                    // Then play the animation
+                    await playAnimation(for: engine.currentLevel, lesson: engine.currentLesson)
+                }
+            }
+        }
+        .onChange(of: engine.currentLevel) { oldLevel, newLevel in
+            // Reset completion animation flag when level changes
+            hasPlayedCompletionAnimation = false
+            // Hide animal when level changes - will appear again when new level is complete
+            hideAnimal()
+        }
+        .onChange(of: engine.currentLesson) { oldLesson, newLesson in
+            // Reset completion animation flag when lesson changes
+            hasPlayedCompletionAnimation = false
+            // Hide animal when lesson changes - will appear again when new lesson is complete
+            hideAnimal()
+        }
+        .onChange(of: showLessonComplete) { _, isShowing in
+            // When lesson complete screen appears, immediately cancel animations and reset
+            if isShowing {
+                stopAllAnimationsAndReset()
+            }
+        }
+        .onAppear {
+            // Don't trigger animation automatically on load - wait for user interaction
+            // Animation will be triggered when level/lesson changes or when explicitly needed
         }
     }
     
@@ -149,24 +232,39 @@ struct GameView: View {
     private func handleNextButton() {
         // Check if we're completing a lesson (on last level of current lesson)
         if engine.isLastLevelInLesson {
+            // Stop all animations and force immediate reset
+            stopAllAnimationsAndReset()
+            
             // Show lesson completion screen
             completedLessonIndex = engine.currentLesson
-            // Check if there's a next lesson available (not the last lesson in unit)
             hasNextLessonAvailable = !engine.isLastLessonInUnit
             showLessonComplete = true
         } else {
             // Just moving to next level within the same lesson
+            // Reset the completion animation flag for the new level
+            hasPlayedCompletionAnimation = false
+            // Hide animal - will appear again when new level is complete
+            hideAnimal()
             engine.nextLevel()
             sceneUpdateTrigger += 1
         }
     }
     
+    // Force stop all animations
+    private func stopAllAnimationsAndReset() {
+        // Cancel any running animation task
+        animationTask?.cancel()
+        isAnimating = false
+    }
+    
     private func handleSkipLevel() {
         // Check if we're completing a lesson (on last level of current lesson)
         if engine.isLastLevelInLesson {
+            // Stop all animations and force immediate reset
+            stopAllAnimationsAndReset()
+            
             // Show lesson completion screen
             completedLessonIndex = engine.currentLesson
-            // Check if there's a next lesson available (not the last lesson in unit)
             hasNextLessonAvailable = !engine.isLastLessonInUnit
             showLessonComplete = true
         } else {
@@ -178,11 +276,17 @@ struct GameView: View {
     
     // MARK: - Scene Setup
     private func setupScene(content: RealityViewContent) {
-        // Clear existing entities
-        content.entities.removeAll()
+        // Remove only word and slot entities, preserve animal
+        for (_, entity) in wordEntities {
+            entity.removeFromParent()
+        }
+        for (_, entity) in slotEntities {
+            entity.removeFromParent()
+        }
         wordEntities.removeAll()
         slotEntities.removeAll()
         
+        // Animal root entity is already created and added in RealityView closure
         // Create slot entities (drop targets) - arranged in a grid (max 4 per row)
         let slotsPerRow: Int = 4
         let slotSpacingX: Float = 0.15
@@ -225,30 +329,66 @@ struct GameView: View {
         }
     }
     
+    // MARK: - Animal Model Loading
+    private func loadAnimalModel() async {
+        guard let rootEntity = animalRootEntity else {
+            print("❌ Animal root entity not found")
+            return
+        }
+        
+        // Remove existing model child if any
+        rootEntity.children.removeAll()
+        
+        do {
+            // Load model entity (same approach as AnimalPickerView)
+            let modelEntity = try await ModelEntity(named: "\(animal).usdz")
+            
+            // 1. Scale to a reasonable size (same as AnimalPickerView)
+            let bounds = modelEntity.visualBounds(relativeTo: nil)
+            let maxDimension = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
+            let scaleFactor = 0.15 / maxDimension
+            modelEntity.scale = SIMD3(repeating: scaleFactor)
+            
+            // 2. Recenter the model so its center is at (0,0,0) (same as AnimalPickerView)
+            let centeredY: Float = -bounds.center.y * scaleFactor + 0
+            
+            modelEntity.position = SIMD3(
+                -bounds.center.x * scaleFactor,
+                centeredY,
+                -bounds.center.z * scaleFactor
+            )
+            
+            // 3. No rotation on model - side profile rotation is applied to root entity
+            
+            // Add model to existing root entity
+            rootEntity.addChild(modelEntity)
+            
+            // Store reference to model entity
+            animalEntity = modelEntity
+            
+            print("✅ Animal model loaded: \(animal)")
+            
+            // Don't start animation automatically - it will be triggered when level/lesson changes
+        } catch {
+            print("❌ ANIMAL MODEL LOADING ERROR: \(error.localizedDescription)")
+            print("   Attempted to load: \(animal).usdz")
+        }
+    }
+    
     // MARK: - Entity Creation
     private func createSlotEntity(index: Int) -> Entity {
         let parent = Entity()
         parent.name = "Slot_\(index)"
         
-        // Create box for slot - all slots have the same color
+        // Create box for slot - pink for active slot, lavender for others
         let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.01])
-        let slotColor: UIColor = Color.lavender.uiColor
+        let isActive = index == engine.currentStep
+        let slotColor: UIColor = isActive ? Color.pastelPink.uiColor : Color.lavender.uiColor
         let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.7), isMetallic: false)
         let box = ModelEntity(mesh: boxMesh, materials: [material])
         box.generateCollisionShapes(recursive: true)
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))
         box.name = "SlotBox_\(index)"
-        
-        // Add white outline for active slot
-        let isActive = index == engine.currentStep
-        if isActive {
-            let outlineMesh = MeshResource.generateBox(size: [0.125, 0.065, 0.011]) // Slightly larger
-            let outlineMaterial = SimpleMaterial(color: .white, isMetallic: false)
-            let outlineBox = ModelEntity(mesh: outlineMesh, materials: [outlineMaterial])
-            outlineBox.position = SIMD3<Float>(0, 0, -0.0005) // Behind the main box
-            outlineBox.name = "SlotOutline_\(index)"
-            parent.addChild(outlineBox)
-        }
         
         // Create text for slot (only show word if dropped, no hints)
         if let droppedWord = engine.droppedWords[index] {
@@ -414,30 +554,13 @@ struct GameView: View {
     }
     
     private func updateSlotAppearance() {
-        // Update slot outlines and text based on current step and dropped words
+        // Update slot text based on current step and dropped words
         for (index, slotEntity) in slotEntities {
             let isActive = index == engine.currentStep
             
-            // Update outline - add or remove white outline for active slot
-            let outlineName = "SlotOutline_\(index)"
-            if let existingOutline = slotEntity.children.first(where: { $0.name == outlineName }) {
-                if !isActive {
-                    // Remove outline if slot is no longer active
-                    existingOutline.removeFromParent()
-                }
-            } else if isActive {
-                // Add outline if slot is now active
-                let outlineMesh = MeshResource.generateBox(size: [0.125, 0.065, 0.011])
-                let outlineMaterial = SimpleMaterial(color: .white, isMetallic: false)
-                let outlineBox = ModelEntity(mesh: outlineMesh, materials: [outlineMaterial])
-                outlineBox.position = SIMD3<Float>(0, 0, -0.0005)
-                outlineBox.name = outlineName
-                slotEntity.addChild(outlineBox)
-            }
-            
-            // Keep box color consistent (no color change based on active state)
+            // Update box color - pink for active slot, lavender for others
             if let box = slotEntity.children.first(where: { $0.name == "SlotBox_\(index)" }) as? ModelEntity {
-                let slotColor: UIColor = Color.lavender.uiColor
+                let slotColor: UIColor = isActive ? Color.pastelPink.uiColor : Color.lavender.uiColor
                 let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.4), isMetallic: false)
                 box.model?.materials = [material]
             }
@@ -477,6 +600,495 @@ struct GameView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Animal Visibility
+    
+    private func showAnimal() async {
+        guard let animalRoot = animalRootEntity else { return }
+        
+        // Animate scale from 0 to 1 to make animal appear
+        var transform = animalRoot.transform
+        transform.scale = SIMD3(repeating: 1.0)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: 0.5
+        )
+    }
+    
+    private func hideAnimal() {
+        guard let animalRoot = animalRootEntity else { return }
+        // Immediately hide the animal by setting scale to 0
+        animalRoot.scale = SIMD3(repeating: 0.0)
+    }
+    
+    // MARK: - Animal Animations
+    func playAnimation(for level: Int, lesson: Int) async {
+        // Don't start new animation if one is already running or if lesson complete screen is showing
+        guard !isAnimating && !showLessonComplete else {
+            return
+        }
+        
+        // Cancel any existing animation
+        animationTask?.cancel()
+        
+        guard let animalRoot = animalRootEntity,
+              let animalModel = animalEntity else {
+            return
+        }
+        
+        // Mark as animating
+        isAnimating = true
+        
+        // Create new animation task
+        animationTask = Task {
+            // Check if cancelled or lesson complete screen is showing before starting
+            guard !Task.isCancelled && !showLessonComplete else {
+                isAnimating = false
+                return
+            }
+            
+            await performAnimation(for: level, lesson: lesson, animalRoot: animalRoot, animalModel: animalModel)
+            
+            // Check again after animation completes
+            guard !Task.isCancelled && !showLessonComplete else {
+                isAnimating = false
+                return
+            }
+            
+            isAnimating = false
+        }
+        
+        await animationTask?.value
+    }
+    
+    private func performAnimation(for level: Int, lesson: Int, animalRoot: Entity, animalModel: ModelEntity) async {
+        
+        // Base position is (0, 0, 0) same as AnimalPickerView
+        // Animations will move from this position
+        
+        // Lesson 1 — Basic Actions
+        if lesson == 0 {
+            switch level {
+            case 0: // Level 1: Idle (no animation)
+                await idleSwayAndBreathe(animalRoot: animalRoot, duration: 3.0)
+                
+            case 1: // Level 2: Proud pose
+                await proudPose(animalRoot: animalRoot, animalModel: animalModel, duration: 2.0)
+                
+            case 2: // Level 3: Run-in-place
+                await runInPlace(animalRoot: animalRoot, duration: 2.0)
+                
+            case 3: // Level 4: Run + eating motion
+                await runAndEat(animalRoot: animalRoot, animalModel: animalModel, duration: 3.0)
+                
+            case 4: // Level 5: Run + eating + playful shake
+                await runEatAndShake(animalRoot: animalRoot, animalModel: animalModel, duration: 3.5)
+                
+            default:
+                break
+            }
+        }
+        // Lesson 2 — Emotions
+        else if lesson == 1 {
+            switch level {
+            case 0: // Level 1: Idle animation
+                await idleSwayAndBreathe(animalRoot: animalRoot, duration: 3.0)
+                
+            case 1: // Level 2: Happy bounce
+                await happyBounceAndTilt(animalRoot: animalRoot, animalModel: animalModel, duration: 2.5)
+                
+            case 2: // Level 3: Big jump
+                await bigJump(animalRoot: animalRoot, duration: 1.5)
+                
+            case 3: // Level 4: Jump + wag
+                await jumpAndWag(animalRoot: animalRoot, animalModel: animalModel, duration: 2.5)
+                
+            case 4: // Level 5: Jump + fast wag + small hop
+                await jumpFastWagAndHop(animalRoot: animalRoot, animalModel: animalModel, duration: 3.0)
+                
+            default:
+                break
+            }
+        }
+        // Lesson 3 — Interactions
+        else if lesson == 2 {
+            switch level {
+            case 0: // Level 1: Idle
+                await idleSwayAndBreathe(animalRoot: animalRoot, duration: 3.0)
+                
+            case 1: // Level 2: Small hop + shrink scale
+                await smallHopAndShrink(animalRoot: animalRoot, animalModel: animalModel, duration: 1.5)
+                
+            case 2: // Level 3: Play bounces
+                await playBounces(animalRoot: animalRoot, duration: 2.0)
+                
+            case 3: // Level 4: Move forward to "ball" and bounce back
+                await moveForwardAndBounce(animalRoot: animalRoot, duration: 2.5)
+                
+            case 4: // Level 5: Move forward → 360° spin → hop
+                await moveSpinAndHop(animalRoot: animalRoot, animalModel: animalModel, duration: 3.0)
+                
+            default:
+                break
+            }
+        }
+    }
+    
+    // MARK: - Animation Helper Functions
+    
+    // Base side profile rotation constant (head toward right)
+    // Combine Y rotation for side profile (-90°) with potential X rotation if needed for feet orientation
+    private let baseSideProfileRotation: simd_quatf = {
+        let yRotation = simd_quatf(angle: -.pi / 2, axis: SIMD3(0, 1, 0)) // Side profile: head toward right
+        // If feet need to point down, we might need X rotation, but let's try without first
+        return yRotation
+    }()
+    
+    // Helper to combine animation rotation with base side profile rotation
+    private func combineRotationWithBase(_ animationRotation: simd_quatf) -> simd_quatf {
+        // Multiply base rotation with animation rotation to combine them
+        return baseSideProfileRotation * animationRotation
+    }
+    
+    // Lesson 1 Animations
+    private func idleSwayAndBreathe(animalRoot: Entity, duration: Float) async {
+        // No animation - animal remains still
+        // Wait for the specified duration
+        try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+    }
+    
+    private func proudPose(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        // Scale up to 1.1
+        let originalScale = animalModel.scale.x
+        var transform = animalModel.transform
+        transform.scale = SIMD3(repeating: originalScale * 1.1)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalModel,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.5)
+        )
+        
+        // Hold pose, then reset scale
+        try? await Task.sleep(nanoseconds: UInt64(duration * 0.5 * 1_000_000_000))
+        transform.scale = SIMD3(repeating: originalScale)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalModel,
+            targetTransform: transform,
+            duration: 0.2
+        )
+    }
+    
+    private func runInPlace(animalRoot: Entity, duration: Float) async {
+        let bounceHeight: Float = 0.02
+        let moveDistance: Float = 0.05
+        let basePosition = animalRoot.position
+        
+        // Run a few cycles then stop (not infinite loop)
+        let cycles = 3
+        for _ in 0..<cycles {
+            // Move forward and up
+            var transform = animalRoot.transform
+            transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + bounceHeight, basePosition.z + moveDistance)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.25
+            )
+            // Move back and down
+            transform.translation = basePosition
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.25
+            )
+        }
+        // Return to base position
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
+    }
+    
+    private func runAndEat(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let bounceHeight: Float = 0.02
+        let moveDistance: Float = 0.05
+        let baseRootTransform = animalRoot.transform
+        
+        // Run (bounce)
+        for _ in 0..<2 {
+            var transform = baseRootTransform
+            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3 + moveDistance)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.3
+            )
+            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.3
+            )
+        }
+        
+        // Pause briefly
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second pause
+    }
+    
+    private func runEatAndShake(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        // Run + eating (from previous)
+        await runAndEat(animalRoot: animalRoot, animalModel: animalModel, duration: 2.0)
+        
+        // Playful shake (Y oscillation) - combine with base side profile rotation
+        let shakeAngle: Float = 10.0 * .pi / 180.0
+        let baseTransform = animalRoot.transform
+        for _ in 0..<3 {
+            var transform = baseTransform
+            let shakeRotation = simd_quatf(angle: shakeAngle, axis: SIMD3(0, 1, 0))
+            transform.rotation = combineRotationWithBase(shakeRotation)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.15
+            )
+            let shakeRotationNeg = simd_quatf(angle: -shakeAngle, axis: SIMD3(0, 1, 0))
+            transform.rotation = combineRotationWithBase(shakeRotationNeg)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.15
+            )
+        }
+    }
+    
+    // Lesson 2 Animations
+    private func happyBounceAndTilt(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let bounceHeight: Float = 0.03
+        let baseRootTransform = animalRoot.transform
+        
+        // Bounce animation
+        for _ in 0..<Int(duration * 2) {
+            var transform = baseRootTransform
+            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.4
+            )
+            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.4
+            )
+        }
+    }
+    
+    private func bigJump(animalRoot: Entity, duration: Float) async {
+        let jumpHeight: Float = 0.15
+        let baseTransform = animalRoot.transform
+        
+        // Jump up
+        var transform = baseTransform
+        transform.translation = SIMD3<Float>(0, jumpHeight, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.5)
+        )
+        // Come down
+        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.5)
+        )
+    }
+    
+    private func jumpAndWag(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        // Jump
+        await bigJump(animalRoot: animalRoot, duration: 1.0)
+        
+        // Fast wag (Y oscillations) - combine with base side profile rotation
+        let wagAngle: Float = 15.0 * .pi / 180.0
+        let baseTransform = animalRoot.transform
+        for _ in 0..<Int((duration - 1.0) * 4) {
+            var transform = baseTransform
+            let wagRotation = simd_quatf(angle: wagAngle, axis: SIMD3(0, 1, 0))
+            transform.rotation = combineRotationWithBase(wagRotation)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.1
+            )
+            let wagRotationNeg = simd_quatf(angle: -wagAngle, axis: SIMD3(0, 1, 0))
+            transform.rotation = combineRotationWithBase(wagRotationNeg)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: 0.1
+            )
+        }
+    }
+    
+    private func jumpFastWagAndHop(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        // Jump + wag
+        await jumpAndWag(animalRoot: animalRoot, animalModel: animalModel, duration: 2.0)
+        
+        // Small hop
+        let hopHeight: Float = 0.05
+        let baseTransform = animalRoot.transform
+        var transform = baseTransform
+        transform.translation = SIMD3<Float>(0, hopHeight, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: 0.3
+        )
+        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: 0.3
+        )
+    }
+    
+    // Lesson 3 Animations
+    private func smallHopAndShrink(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let hopHeight: Float = 0.05
+        let originalScale = animalModel.scale.x
+        let baseRootTransform = animalRoot.transform
+        let baseModelTransform = animalModel.transform
+        
+        // Small hop
+        var rootTransform = baseRootTransform
+        rootTransform.translation = SIMD3<Float>(0, hopHeight, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: rootTransform,
+            duration: TimeInterval(duration * 0.3)
+        )
+        
+        // Shrink scale while in air
+        var modelTransform = baseModelTransform
+        modelTransform.scale = SIMD3(repeating: originalScale * 0.95)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalModel,
+            targetTransform: modelTransform,
+            duration: TimeInterval(duration * 0.2)
+        )
+        
+        // Come down and scale back
+        rootTransform.translation = SIMD3<Float>(0, 0, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: rootTransform,
+            duration: TimeInterval(duration * 0.3)
+        )
+        modelTransform.scale = SIMD3(repeating: originalScale)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalModel,
+            targetTransform: modelTransform,
+            duration: TimeInterval(duration * 0.2)
+        )
+    }
+    
+    private func playBounces(animalRoot: Entity, duration: Float) async {
+        let bounceHeight: Float = 0.06
+        let baseTransform = animalRoot.transform
+        let bounceDuration = TimeInterval(duration / 6.0)
+        
+        // 3 quick bounces
+        for _ in 0..<3 {
+            var transform = baseTransform
+            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: bounceDuration
+            )
+            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            await AnimalAnimationHelper.animateTransform(
+                entity: animalRoot,
+                targetTransform: transform,
+                duration: bounceDuration
+            )
+        }
+    }
+    
+    private func moveForwardAndBounce(animalRoot: Entity, duration: Float) async {
+        let forwardDistance: Float = 0.15
+        let bounceHeight: Float = 0.08
+        let baseTransform = animalRoot.transform
+        
+        // Move forward and bounce up
+        var transform = baseTransform
+        transform.translation = SIMD3<Float>(0, bounceHeight, -0.3 + forwardDistance)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.4)
+        )
+        
+        // Bounce back down
+        transform.translation = SIMD3<Float>(0, 0, -0.3 + forwardDistance)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.2)
+        )
+        
+        // Move back
+        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.4)
+        )
+    }
+    
+    private func moveSpinAndHop(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let forwardDistance: Float = 0.15
+        let hopHeight: Float = 0.08
+        let baseTransform = animalRoot.transform
+        
+        // Move forward
+        var transform = baseTransform
+        transform.translation = SIMD3<Float>(0, 0, -0.3 + forwardDistance)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.3)
+        )
+        
+        // 360° spin (on root Y axis) - combine with base side profile rotation
+        let spinAngle: Float = 2.0 * .pi
+        let spinRotation = simd_quatf(angle: spinAngle, axis: SIMD3(0, 1, 0))
+        transform.rotation = combineRotationWithBase(spinRotation)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.4)
+        )
+        
+        // Hop
+        transform.translation = SIMD3<Float>(0, hopHeight, transform.translation.z)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.15)
+        )
+        transform.translation = SIMD3<Float>(0, 0, transform.translation.z)
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.15)
+        )
     }
 }
 
