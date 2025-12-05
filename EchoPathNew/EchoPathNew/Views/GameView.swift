@@ -1,10 +1,3 @@
-//
-//  GameView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/22/25.
-//
-
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -26,12 +19,11 @@ struct GameView: View {
     @State private var animalRootEntity: Entity? = nil
     @State private var animationTask: Task<Void, Never>? = nil
     @State private var isAnimating: Bool = false
-    @State private var hasPlayedCompletionAnimation: Bool = false // Track if we've played animation for this level
+    @State private var hasPlayedCompletionAnimation: Bool = false
     @Environment(\.dismiss) private var dismiss
     
     private let animal: String
     
-    // Computed property to check if sentence is complete
     private var isSentenceComplete: Bool {
         engine.currentStep == engine.currentSentence.count
     }
@@ -41,7 +33,6 @@ struct GameView: View {
         _engine = State(wrappedValue: GameEngine(animal: animal))
     }
     
-    // Computed property for next button text
     private var nextButtonText: String {
         if !engine.isLastLevelInLesson {
             return "Next Level"
@@ -54,22 +45,16 @@ struct GameView: View {
     
     var body: some View {
         ZStack {
-            // RealityKit 3D Scene - Full screen, interactive
             RealityView { content in
-                // Add animal root entity immediately (same pattern as AnimalPickerView)
                 if animalRootEntity == nil {
                     let rootEntity = Entity()
                     rootEntity.name = "AnimalRoot"
-                    // Set base rotation for side profile view (head toward right, feet down)
                     rootEntity.transform.rotation = simd_quatf(angle: -.pi / 2, axis: SIMD3(0, 0.5, 0))
-                    // Set position - lower the animal (negative Y = down)
                     rootEntity.position = SIMD3<Float>(0, -0.1, 0)
-                    // Hide animal initially - will be shown when lesson is complete
                     rootEntity.scale = SIMD3(repeating: 0.0)
                     animalRootEntity = rootEntity
                     content.add(rootEntity)
                     
-                    // Load model in task
                     Task {
                         await loadAnimalModel()
                     }
@@ -79,13 +64,11 @@ struct GameView: View {
                 
                 setupScene(content: content)
             } update: { content in
-                // Ensure animal is still in content when scene updates
                 if let animalRoot = animalRootEntity, animalRoot.parent == nil {
                     content.add(animalRoot)
                 }
-                // Don't trigger animation here - it's handled by onChange modifiers
             }
-            .id(sceneUpdateTrigger) // Force re-render when trigger changes
+            .id(sceneUpdateTrigger)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .gesture(
                 DragGesture()
@@ -98,10 +81,8 @@ struct GameView: View {
                     }
             )
             
-            // Unit/Lesson/Level title at top and Controls at bottom (hidden when lesson complete)
             if !showLessonComplete {
                 VStack {
-                    // Title card with puzzle piece accent
                     HStack(spacing: 10) {
                         VStack(spacing: 6) {
                             Text(engine.unitName)
@@ -126,7 +107,6 @@ struct GameView: View {
                     
                     Spacer()
                     
-                    // Controls at bottom
                     HStack(spacing: 12) {
                         if engine.currentStep == engine.currentSentence.count {
                             Button(nextButtonText) {
@@ -135,7 +115,6 @@ struct GameView: View {
                             .buttonStyle(PastelPrimaryButtonStyle())
                         }
                         
-                        // Development/Testing: Skip to next level
                         Button("Skip Level") {
                             handleSkipLevel()
                         }
@@ -155,7 +134,6 @@ struct GameView: View {
                 }
             }
             
-            // Lesson Complete Overlay
             if showLessonComplete {
                 LessonCompleteView(
                     lessonName: (completedLessonIndex >= 0 && completedLessonIndex < engine.lessonNames.count) 
@@ -163,29 +141,21 @@ struct GameView: View {
                         : "Lesson",
                     hasNextLesson: hasNextLessonAvailable,
                     onContinue: {
-                        // Only proceed if there's actually a next lesson available
                         guard hasNextLessonAvailable else {
                             return
                         }
                         
                         showLessonComplete = false
-                        // Reset animal orientation before continuing to next lesson
                         animationTask?.cancel()
                         isAnimating = false
-                        // Reset completion animation flag for the new lesson
                         hasPlayedCompletionAnimation = false
-                        // Hide animal - will appear again when new lesson is complete
                         hideAnimal()
                         
-                        // Advance to next lesson (this will move to lesson + 1, level 0)
                         engine.nextLevel()
                         
-                        // Force scene update after state changes
                         sceneUpdateTrigger += 1
                     },
                     onExit: {
-                        // Navigate back to title screen (ContentView)
-                        // Dismiss will pop back through the navigation stack
                         dismiss()
                     }
                 )
@@ -193,108 +163,77 @@ struct GameView: View {
         }
         .navigationTitle("Sentence Builder")
         .onChange(of: engine.availableWords) { _, _ in
-            // Update word entities without recreating entire scene
             sceneUpdateTrigger += 1
         }
         .onChange(of: engine.droppedWords) { _, _ in
-            // Update slot appearance without recreating entire scene
             sceneUpdateTrigger += 1
         }
         .onChange(of: engine.currentStep) { oldStep, newStep in
             updateSlotAppearance()
             
-            // Check if sentence is now complete and we haven't played animation yet
             if isSentenceComplete && !hasPlayedCompletionAnimation && !showLessonComplete {
-                // Play animation when sentence is completed
                 hasPlayedCompletionAnimation = true
                 Task {
-                    // First, make the animal visible
                     await showAnimal()
-                    // Then play the animation
                     await playAnimation(for: engine.currentLevel, lesson: engine.currentLesson)
                 }
             }
         }
         .onChange(of: engine.currentLevel) { oldLevel, newLevel in
-            // Reset completion animation flag when level changes
             hasPlayedCompletionAnimation = false
-            // Hide animal when level changes - will appear again when new level is complete
             hideAnimal()
         }
         .onChange(of: engine.currentLesson) { oldLesson, newLesson in
-            // Reset completion animation flag when lesson changes
             hasPlayedCompletionAnimation = false
-            // Hide animal when lesson changes - will appear again when new lesson is complete
             hideAnimal()
         }
         .onChange(of: showLessonComplete) { _, isShowing in
-            // When lesson complete screen appears, immediately cancel animations and reset
             if isShowing {
                 stopAllAnimationsAndReset()
             }
         }
         .onAppear {
-            // Don't trigger animation automatically on load - wait for user interaction
-            // Animation will be triggered when level/lesson changes or when explicitly needed
         }
     }
     
-    // MARK: - Navigation Handlers
     private func handleNextButton() {
-        // Check if we're completing a lesson (on last level of current lesson)
         if engine.isLastLevelInLesson {
-            // Stop all animations and force immediate reset
             stopAllAnimationsAndReset()
             
-            // Show lesson completion screen
             completedLessonIndex = engine.currentLesson
             hasNextLessonAvailable = !engine.isLastLessonInUnit
             showLessonComplete = true
         } else {
-            // Just moving to next level within the same lesson
-            // Reset the completion animation flag for the new level
             hasPlayedCompletionAnimation = false
-            // Hide animal - will appear again when new level is complete
             hideAnimal()
             engine.nextLevel()
             sceneUpdateTrigger += 1
         }
     }
     
-    // Force stop all animations
     private func stopAllAnimationsAndReset() {
-        // Cancel any running animation task
         animationTask?.cancel()
         isAnimating = false
     }
     
     private func handleSkipLevel() {
-        // Play animation before skipping if it hasn't been played yet
         Task {
-            // If animation hasn't been played for this level, play it first
             if !hasPlayedCompletionAnimation {
                 hasPlayedCompletionAnimation = true
                 await showAnimal()
                 await playAnimation(for: engine.currentLevel, lesson: engine.currentLesson)
             }
             
-            // Wait a brief moment after animation completes
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            try? await Task.sleep(nanoseconds: 500_000_000)
             
-            // Now proceed with skip logic
             if engine.isLastLevelInLesson {
-                // Stop all animations and force immediate reset
                 stopAllAnimationsAndReset()
                 
-                // Show lesson completion screen
                 completedLessonIndex = engine.currentLesson
                 hasNextLessonAvailable = !engine.isLastLessonInUnit
                 showLessonComplete = true
             } else {
-                // Just moving to next level within the same lesson
-                // Reset the completion animation flag for the new level
                 hasPlayedCompletionAnimation = false
-                // Hide animal - will appear again when new level is complete
                 hideAnimal()
                 engine.nextLevel()
                 sceneUpdateTrigger += 1
@@ -302,9 +241,7 @@ struct GameView: View {
         }
     }
     
-    // MARK: - Scene Setup
     private func setupScene(content: RealityViewContent) {
-        // Remove only word and slot entities, preserve animal
         for (_, entity) in wordEntities {
             entity.removeFromParent()
         }
@@ -314,10 +251,6 @@ struct GameView: View {
         wordEntities.removeAll()
         slotEntities.removeAll()
         
-        // Animal root entity is already created and added in RealityView closure
-        // Create slot entities (drop targets) - arranged in a grid (max 4 per row)
-        
-        // Safety check: ensure sentence is valid before accessing
         let currentSentence = engine.currentSentence
         guard !currentSentence.isEmpty else {
             print("⚠️ Warning: Empty sentence in setupScene, skipping slot creation")
@@ -326,33 +259,29 @@ struct GameView: View {
         
         let slotsPerRow: Int = 4
         let slotSpacingX: Float = 0.15
-        let slotSpacingY: Float = -0.08  // Vertical spacing between rows
+        let slotSpacingY: Float = -0.08
         let totalSlots = currentSentence.count
         
         for (index, _) in currentSentence.enumerated() {
             let slotEntity = createSlotEntity(index: index)
             
-            // Calculate row and column
             let row = index / slotsPerRow
             let col = index % slotsPerRow
             
-            // Calculate position for this row
             let slotsInRow = min(slotsPerRow, totalSlots - row * slotsPerRow)
             let startX: Float = -Float(slotsInRow - 1) * slotSpacingX / 2
             
             slotEntity.position = SIMD3<Float>(
                 startX + Float(col) * slotSpacingX,
                 0.1 + Float(row) * slotSpacingY,
-                0.0  // Move closer to camera
+                0.0
             )
             slotEntities[index] = slotEntity
             content.add(slotEntity)
         }
         
-        // Create word entities (draggable) - arranged in a word bank
         let availableWords = engine.availableWords
         
-        // Safety check: ensure available words are valid before accessing
         guard !availableWords.isEmpty else {
             print("⚠️ Warning: Empty availableWords in setupScene, skipping word creation")
             return
@@ -366,34 +295,29 @@ struct GameView: View {
             wordEntity.position = SIMD3<Float>(
                 wordStartX + Float(wordIndex) * wordSpacing,
                 -0.1,
-                0.0  // Move closer to camera
+                0.0
             )
             wordEntities[word] = wordEntity
             content.add(wordEntity)
         }
     }
     
-    // MARK: - Animal Model Loading
     private func loadAnimalModel() async {
         guard let rootEntity = animalRootEntity else {
             print("❌ Animal root entity not found")
             return
         }
         
-        // Remove existing model child if any
         rootEntity.children.removeAll()
         
         do {
-            // Load model entity (same approach as AnimalPickerView)
             let modelEntity = try await ModelEntity(named: "\(animal).usdz")
             
-            // 1. Scale to a reasonable size (same as AnimalPickerView)
             let bounds = modelEntity.visualBounds(relativeTo: nil)
             let maxDimension = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
             let scaleFactor = 0.15 / maxDimension
             modelEntity.scale = SIMD3(repeating: scaleFactor)
             
-            // 2. Recenter the model so its center is at (0,0,0) (same as AnimalPickerView)
             let centeredY: Float = -bounds.center.y * scaleFactor + 0
             
             modelEntity.position = SIMD3(
@@ -402,30 +326,21 @@ struct GameView: View {
                 -bounds.center.z * scaleFactor
             )
             
-            // 3. No rotation on model - side profile rotation is applied to root entity
-            
-            // Add model to existing root entity
             rootEntity.addChild(modelEntity)
             
-            // Store reference to model entity
             animalEntity = modelEntity
             
             print("✅ Animal model loaded: \(animal)")
-            
-            // Don't start animation automatically - it will be triggered when level/lesson changes
         } catch {
             print("❌ ANIMAL MODEL LOADING ERROR: \(error.localizedDescription)")
             print("   Attempted to load: \(animal).usdz")
         }
     }
     
-    // MARK: - Entity Creation
     private func createSlotEntity(index: Int) -> Entity {
         let parent = Entity()
         parent.name = "Slot_\(index)"
         
-        // Create box for slot - pink for active slot, lavender for others
-        // Increased depth (Z axis) from 0.01 to 0.06 to make it easier to drag words into
         let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.06])
         let isActive = index == engine.currentStep
         let slotColor: UIColor = isActive ? Color.pastelPink.uiColor : Color.lavender.uiColor
@@ -435,8 +350,6 @@ struct GameView: View {
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))
         box.name = "SlotBox_\(index)"
         
-        // Create text for slot (only show word if dropped, no hints)
-        // Safety check: ensure index is within bounds of droppedWords array
         if index >= 0 && index < engine.droppedWords.count,
            let droppedWord = engine.droppedWords[index] {
             let textMesh = MeshResource.generateText(
@@ -463,14 +376,12 @@ struct GameView: View {
         let parent = Entity()
         parent.name = "Word_\(word)"
         
-        // Create box for word
         let boxMesh = MeshResource.generateBox(size: [0.1, 0.05, 0.01])
         let material = SimpleMaterial(color: .cyan.withAlphaComponent(0.5), isMetallic: false)
         let box = ModelEntity(mesh: boxMesh, materials: [material])
         box.generateCollisionShapes(recursive: true)
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))
         
-        // Create text for word
         let textMesh = MeshResource.generateText(
             word,
             extrusionDepth: 0.002,
@@ -489,47 +400,38 @@ struct GameView: View {
         return parent
     }
     
-    // MARK: - Drag Handling
     private func handleDragChanged(value: EntityTargetValue<DragGesture.Value>) {
         let entity = value.entity
         
-        // Find the word entity parent (the entity stored in wordEntities)
         var targetEntity: Entity? = nil
         var word: String? = nil
         
-        // Check if this entity itself is a word entity
         if let w = getWordFromEntity(entity), let storedEntity = wordEntities[w], storedEntity == entity {
             targetEntity = entity
             word = w
         } else if let parent = entity.parent {
-            // Check if parent is a word entity
             if let w = getWordFromEntity(parent), let storedEntity = wordEntities[w], storedEntity == parent {
                 targetEntity = parent
                 word = w
             } else if let grandparent = parent.parent, let w = getWordFromEntity(grandparent), let storedEntity = wordEntities[w], storedEntity == grandparent {
-                // Check grandparent (in case we're hitting a deeply nested child)
                 targetEntity = grandparent
                 word = w
             }
         }
         
         guard let target = targetEntity, let w = word else { 
-            // Not a word entity, ignore
             return 
         }
         
-        // Store original position on first drag
         if draggedWord == nil {
             draggedWord = w
             draggedEntity = target
             originalPosition = target.position
         }
         
-        // Update position during drag - use same conversion as TestView
         if let parent = target.parent {
             target.position = value.convert(value.location3D, from: .local, to: parent)
         } else {
-            // Fallback - use the entity itself as coordinate space
             target.position = value.convert(value.location3D, from: .local, to: target)
         }
     }
@@ -554,7 +456,6 @@ struct GameView: View {
         for (index, slotEntity) in slotEntities {
             let slotPosition = slotEntity.position(relativeTo: coordinateSpace)
             
-            // Calculate X/Z distance only (ignore Y axis)
             let dx = dragPosition.x - slotPosition.x
             let dz = dragPosition.z - slotPosition.z
             let xzDistance = sqrt(dx * dx + dz * dz)
@@ -566,26 +467,20 @@ struct GameView: View {
             }
         }
         
-        // If a slot is close enough, snap to it and handle the drop
         if let slotIndex = closestSlotIndex,
            let slotPosition = closestSlotPosition {
-            // Snap the dragged entity to the exact slot position
             draggedEntity.position = slotPosition
             
-            // Handle the drop
             let wasInAvailable = engine.availableWords.contains(word)
             engine.handleDrop(word, at: slotIndex)
             
-            // If word was correctly placed, it will be removed from availableWords
             if !engine.availableWords.contains(word) && wasInAvailable {
-                // Remove word entity from scene immediately
                 draggedEntity.removeFromParent()
                 wordEntities.removeValue(forKey: word)
             }
             
             sceneUpdateTrigger += 1
         } else {
-            // No slot is close enough, return to original position
             if let originalPos = originalPosition {
                 draggedEntity.position = originalPos
             }
@@ -600,14 +495,11 @@ struct GameView: View {
         originalPosition = nil
     }
     
-    // MARK: - Helper Functions
     private func getWordFromEntity(_ entity: Entity) -> String? {
-        // Check if entity name starts with "Word_"
         let entityName = entity.name
         if !entityName.isEmpty && entityName.hasPrefix("Word_") {
             return String(entityName.dropFirst(5))
         }
-        // Check parent
         if let parent = entity.parent {
             let parentName = parent.name
             if !parentName.isEmpty && parentName.hasPrefix("Word_") {
@@ -618,21 +510,16 @@ struct GameView: View {
     }
     
     private func updateSlotAppearance() {
-        // Update slot text based on current step and dropped words
         for (index, slotEntity) in slotEntities {
             let isActive = index == engine.currentStep
             
-            // Update box color - pink for active slot, lavender for others
             if let box = slotEntity.children.first(where: { $0.name == "SlotBox_\(index)" }) as? ModelEntity {
                 let slotColor: UIColor = isActive ? Color.pastelPink.uiColor : Color.lavender.uiColor
                 let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.4), isMetallic: false)
                 box.model?.materials = [material]
             }
             
-            // Update text - only show if word is dropped
-            // Safety check: ensure index is within bounds of droppedWords array
             guard index >= 0 && index < engine.droppedWords.count else {
-                // Index out of bounds - remove text if it exists and continue
                 if let textEntity = slotEntity.children.first(where: { $0.name == "SlotText_\(index)" }) {
                     textEntity.removeFromParent()
                 }
@@ -640,9 +527,7 @@ struct GameView: View {
             }
             
             if let droppedWord = engine.droppedWords[index] {
-                // Check if text entity already exists
                 if let textEntity = slotEntity.children.first(where: { $0.name == "SlotText_\(index)" }) as? ModelEntity {
-                    // Update existing text
                     let textMesh = MeshResource.generateText(
                         droppedWord,
                         extrusionDepth: 0.002,
@@ -653,7 +538,6 @@ struct GameView: View {
                     let bounds = textEntity.visualBounds(relativeTo: nil)
                     textEntity.position = SIMD3(-bounds.center.x, -bounds.center.y, 0.006)
                 } else {
-                    // Create new text entity
                     let textMesh = MeshResource.generateText(
                         droppedWord,
                         extrusionDepth: 0.002,
@@ -667,7 +551,6 @@ struct GameView: View {
                     slotEntity.addChild(textEntity)
                 }
             } else {
-                // Remove text entity if word is removed
                 if let textEntity = slotEntity.children.first(where: { $0.name == "SlotText_\(index)" }) {
                     textEntity.removeFromParent()
                 }
@@ -675,12 +558,9 @@ struct GameView: View {
         }
     }
     
-    // MARK: - Animal Visibility
-    
     private func showAnimal() async {
         guard let animalRoot = animalRootEntity else { return }
         
-        // Animate scale from 0 to 1 to make animal appear
         var transform = animalRoot.transform
         transform.scale = SIMD3(repeating: 1.0)
         await AnimalAnimationHelper.animateTransform(

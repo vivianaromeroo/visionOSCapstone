@@ -1,10 +1,3 @@
-//
-//  EchoPathNewApp.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/22/25.
-//
-
 import SwiftUI
 
 @main

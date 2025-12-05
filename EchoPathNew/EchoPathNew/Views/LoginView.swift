@@ -1,10 +1,3 @@
-//
-//  LoginView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/28/25.
-//
-
 import SwiftUI
 
 struct LoginView: View {
@@ -24,21 +17,17 @@ struct LoginView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Soft gradient background
                 LinearGradient.backgroundGradient
                     .ignoresSafeArea()
                 
                 VStack(spacing: 30) {
-                    // Title with puzzle piece accent
                     HStack(spacing: 15) {
                         Text("Login")
                             .pastelTitle()
                     }
                     .padding(.bottom, 10)
                     
-                    // Input fields in pastel card
                     VStack(spacing: 25) {
-                        // First field
                         VStack(alignment: .center, spacing: 12) {
                             Text("Enter Child's ID")
                                 .font(.system(size: 35, weight: .semibold, design: .rounded))
@@ -56,7 +45,6 @@ struct LoginView: View {
                                 .padding(.bottom, 10)
                         }
                         
-                        // Second field
                         VStack(alignment: .center, spacing: 12) {
                             Text("Enter Child's Date of Birth")
                                 .font(.system(size: 35, weight: .semibold, design: .rounded))
@@ -74,7 +62,6 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 40)
                     
-                    // Tutorial checkbox
                     Toggle(isOn: $showTutorial) {
                         Text("Play tutorial")
                             .font(.system(size: 28, weight: .medium, design: .rounded))
@@ -84,7 +71,6 @@ struct LoginView: View {
                     .padding(.horizontal, 525)
                     .padding(.top, 10)
                     
-                    // Login button
                     Button(action: handleLogin) {
                         HStack {
                             if isLoading {
@@ -104,7 +90,6 @@ struct LoginView: View {
                     
                     Spacer()
                     
-                    // Status message
                     if let errorMessage = errorMessage {
                         Text(errorMessage)
                             .pastelBody()
@@ -129,7 +114,6 @@ struct LoginView: View {
     }
     
     private func handleLogin() {
-        // Reset error message
         errorMessage = nil
         isLoading = true
         
@@ -140,14 +124,13 @@ struct LoginView: View {
                     dateOfBirth: field2
                 )
                 
-                // Store user data in AppModel
                 appModel.child = response.child
                 appModel.preferences = response.preferences
                 appModel.welcomeMessage = "Welcome back! Today's lesson is..."
                 appModel.unitName = "My Animal Friend"
                 appModel.lessonName = "Basic Actions"
+                appModel.showTutorial = showTutorial
                 
-                // Navigate to AnimalPickerView on success
                 await MainActor.run {
                     isLoading = false
                     isAuthenticated = true

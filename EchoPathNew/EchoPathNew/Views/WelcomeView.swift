@@ -1,10 +1,3 @@
-//
-//  WelcomeView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/28/25.
-//
-
 import SwiftUI
 
 struct WelcomeView: View {
@@ -14,14 +7,12 @@ struct WelcomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Soft gradient background
                 LinearGradient.backgroundGradient
                     .ignoresSafeArea()
                 
                 VStack(spacing: 40) {
                     Spacer()
                     
-                    // Welcome message
                     VStack(spacing: 20) {
                         if let firstName = appModel.child?.firstName {
                             Text("Hi there, \(firstName)!")
@@ -39,12 +30,10 @@ struct WelcomeView: View {
                         }
                         
                         VStack {
-                            // Animal emoji based on preference
                             Text(animalEmoji)
                                 .font(.system(size: 120))
                                 .padding(.top, 10)
                             
-                            // Unit and Lesson information
                             if let unitName = appModel.unitName, let lessonName = appModel.lessonName {
                                 VStack(spacing: 8) {
                                     Text(unitName)
@@ -66,7 +55,6 @@ struct WelcomeView: View {
                         .cornerRadius(20)
                     }
                     
-                    // Play button
                     Button(action: {
                         navigateToAnimalPicker = true
                     }) {

@@ -1,13 +1,5 @@
-//
-//  AppModel.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/22/25.
-//
-
 import SwiftUI
 
-/// Maintains app-wide state
 @MainActor
 @Observable
 class AppModel {
@@ -19,10 +11,10 @@ class AppModel {
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
     
-    // User data
     var child: Child?
     var preferences: Preferences?
     var welcomeMessage: String?
     var unitName: String?
     var lessonName: String?
+    var showTutorial: Bool = false
 }

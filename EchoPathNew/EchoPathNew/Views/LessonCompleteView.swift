@@ -1,10 +1,3 @@
-//
-//  LessonCompleteView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/28/25.
-//
-
 import SwiftUI
 
 struct LessonCompleteView: View {
@@ -18,7 +11,6 @@ struct LessonCompleteView: View {
             VStack(spacing: 40) {
                 Spacer()
                 
-                // Congratulations message
                 VStack(spacing: 25) {
                     Text("🎉")
                         .font(.system(size: 100))
@@ -36,7 +28,6 @@ struct LessonCompleteView: View {
                 
                 Spacer()
                 
-                // Action buttons
                 VStack(spacing: 20) {
                     if hasNextLesson {
                         Button(action: onContinue) {

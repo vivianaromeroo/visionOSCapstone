@@ -1,10 +1,3 @@
-//
-//  AuthService.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/28/25.
-//
-
 import Foundation
 
 enum AuthError: LocalizedError {
@@ -39,12 +32,10 @@ class AuthService {
     private init() {}
     
     func login(shortId: String, dateOfBirth: Date) async throws -> LoginResponse {
-        // Format date as YYYY-MM-DD
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: dateOfBirth)
         
-        // Create request payload
         let requestBody = LoginRequest(shortId: shortId, dateOfBirth: dateString)
         
         guard let url = URL(string: baseURL) else {

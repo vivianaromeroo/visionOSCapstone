@@ -1,10 +1,3 @@
-//
-//  AnimalPickerView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/22/25.
-//
-
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -12,6 +5,7 @@ import RealityKit
 import RealityKitContent
 
 struct AnimalPickerView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var selectedAnimal: String = "Dog"
     let animals = ["Dog", "Cat", "Horse"]
     @State private var modelEntity: ModelEntity?
@@ -23,19 +17,16 @@ struct AnimalPickerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Soft gradient background
                 LinearGradient.backgroundGradient
                     .ignoresSafeArea()
                 
                 VStack(spacing: 25) {
-                    // Title with puzzle pieces
                     Text("What is your favorite animal?")
                         .pastelTitle()
                         .multilineTextAlignment(.center)
                     
                     Spacer()
                     
-                    // 3D Model in card
                     RealityView { content in
                         content.add(rootEntity)
                         
@@ -51,7 +42,6 @@ struct AnimalPickerView: View {
                     .frame(width: 450, height: 300)
                     .cornerRadius(30)
                     
-                    // Picker styled
                     Picker("Animal", selection: $selectedAnimal) {
                         ForEach(animals, id: \.self) { animal in
                             Text(animal)
@@ -63,8 +53,7 @@ struct AnimalPickerView: View {
                     .frame(height: 50)
                     .cornerRadius(25)
                     
-                    // Continue button
-                    NavigationLink(destination: GameView(animal: selectedAnimal)) {
+                    NavigationLink(destination: destinationView) {
                         Text("Continue")
                             .frame(maxWidth: .infinity)
                             .font(.system(size: 35))
@@ -89,14 +78,11 @@ struct AnimalPickerView: View {
         do {
             let modelEntity = try await ModelEntity(named: "\(name).usdz")
             
-            // 1. Scale to a reasonable size
             let bounds = modelEntity.visualBounds(relativeTo: nil)
             let maxDimension = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
             let scaleFactor = 0.15 / maxDimension
             modelEntity.scale = SIMD3(repeating: scaleFactor)
             
-            // 2. Recenter the model so its center is at (0,0,0),
-            //    then nudge it upward slightly so it appears higher in the card
             let centeredY: Float = -bounds.center.y * scaleFactor + 0
             
             modelEntity.position = SIMD3(
@@ -119,9 +105,26 @@ struct AnimalPickerView: View {
             rootEntity.transform.rotation = simd_quatf(angle: rotationAngle, axis: SIMD3(0, 1, 0))
         }
     }
+    
+    @ViewBuilder
+    private var destinationView: some View {
+        if appModel.showTutorial {
+            TutorialView(animal: selectedAnimal)
+        } else {
+            GameView(animal: selectedAnimal)
+        }
+    }
+}
+
+@MainActor
+private func makePreviewModel() -> AppModel {
+    let model = AppModel()
+    model.showTutorial = true
+    return model
 }
 
 #Preview {
     AnimalPickerView()
+        .environment(makePreviewModel())
 }
 

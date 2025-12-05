@@ -1,13 +1,4 @@
-//
-//  Models.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/28/25.
-//
-
 import Foundation
-
-// MARK: - API Response Models
 
 struct Child: Codable {
     let id: String
@@ -62,8 +53,6 @@ struct LoginResponse: Codable {
         case lessonName = "lesson_name"
     }
 }
-
-// MARK: - API Request Models
 
 struct LoginRequest: Codable {
     let shortId: String
