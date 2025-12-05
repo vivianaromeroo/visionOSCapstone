@@ -55,7 +55,6 @@ struct WelcomeView: View {
                                         .font(.system(size: 28, weight: .medium, design: .rounded))
                                         .foregroundColor(.white.opacity(0.9))
                                 }
-                                .padding(.top, 20)
                             } else if let unitName = appModel.unitName {
                                 Text(unitName)
                                     .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -120,7 +119,7 @@ private func makePreviewModel() -> AppModel {
         shortId: "ABC123",
         firstName: "Liam",
         lastName: "Martinez",
-        animalPreference: nil,
+        animalPreference: "cat",
         currentPath: nil
     )
     model.welcomeMessage = "Welcome back! Today's lesson is..."

@@ -31,20 +31,36 @@ class GameEngine {
     var feedback: String
 
     // Convenience
-    var currentSentence: [String] { 
-        sentences[currentUnit][currentLesson][currentLevel]
+    var currentSentence: [String] {
+        guard currentUnit >= 0 && currentUnit < sentences.count,
+              currentLesson >= 0 && currentLesson < sentences[currentUnit].count,
+              currentLevel >= 0 && currentLevel < sentences[currentUnit][currentLesson].count else {
+            // Return empty array if indices are invalid (shouldn't happen, but prevents crash)
+            return []
+        }
+        return sentences[currentUnit][currentLesson][currentLevel]
     }
     
     var currentLessonName: String {
-        lessonNames[currentLesson]
+        guard currentLesson >= 0 && currentLesson < lessonNames.count else {
+            return "Lesson"
+        }
+        return lessonNames[currentLesson]
     }
     
     var isLastLevelInLesson: Bool {
-        currentLevel >= sentences[currentUnit][currentLesson].count - 1
+        guard currentUnit >= 0 && currentUnit < sentences.count,
+              currentLesson >= 0 && currentLesson < sentences[currentUnit].count else {
+            return true
+        }
+        return currentLevel >= sentences[currentUnit][currentLesson].count - 1
     }
     
     var isLastLessonInUnit: Bool {
-        currentLesson >= sentences[currentUnit].count - 1
+        guard currentUnit >= 0 && currentUnit < sentences.count else {
+            return true
+        }
+        return currentLesson >= sentences[currentUnit].count - 1
     }
 
     // MARK: - Initialization
@@ -114,6 +130,14 @@ class GameEngine {
     /// Advance to the next level (if any)
     /// Progresses: Level -> Lesson -> Unit
     func nextLevel() {
+        // Validate indices before accessing arrays
+        guard currentUnit >= 0 && currentUnit < sentences.count else {
+            return // Invalid unit index
+        }
+        guard currentLesson >= 0 && currentLesson < sentences[currentUnit].count else {
+            return // Invalid lesson index
+        }
+        
         // Check if we can advance within the current lesson
         if currentLevel < sentences[currentUnit][currentLesson].count - 1 {
             currentLevel += 1
@@ -132,11 +156,18 @@ class GameEngine {
             currentLevel = 0
             resetLevel()
         }
-        // Otherwise, we're at the end
+        // Otherwise, we're at the end - do nothing
     }
     
     /// Check if there's a next level/lesson/unit available
     var hasNext: Bool {
+        guard currentUnit >= 0 && currentUnit < sentences.count else {
+            return false
+        }
+        guard currentLesson >= 0 && currentLesson < sentences[currentUnit].count else {
+            return false
+        }
+        
         if currentLevel < sentences[currentUnit][currentLesson].count - 1 {
             return true
         }
@@ -151,8 +182,17 @@ class GameEngine {
 
     /// Reset the current level state
     func resetLevel() {
-        droppedWords = Array(repeating: nil, count: currentSentence.count)
-        availableWords = currentSentence.shuffled()
+        let sentence = currentSentence
+        guard !sentence.isEmpty else {
+            // If sentence is invalid/empty, don't crash - just reset to empty state
+            droppedWords = []
+            availableWords = []
+            currentStep = 0
+            feedback = ""
+            return
+        }
+        droppedWords = Array(repeating: nil, count: sentence.count)
+        availableWords = sentence.shuffled()
         currentStep = 0
         feedback = ""
     }

@@ -158,9 +158,16 @@ struct GameView: View {
             // Lesson Complete Overlay
             if showLessonComplete {
                 LessonCompleteView(
-                    lessonName: engine.lessonNames[completedLessonIndex],
+                    lessonName: (completedLessonIndex >= 0 && completedLessonIndex < engine.lessonNames.count) 
+                        ? engine.lessonNames[completedLessonIndex] 
+                        : "Lesson",
                     hasNextLesson: hasNextLessonAvailable,
                     onContinue: {
+                        // Only proceed if there's actually a next lesson available
+                        guard hasNextLessonAvailable else {
+                            return
+                        }
+                        
                         showLessonComplete = false
                         // Reset animal orientation before continuing to next lesson
                         animationTask?.cancel()
@@ -169,7 +176,11 @@ struct GameView: View {
                         hasPlayedCompletionAnimation = false
                         // Hide animal - will appear again when new lesson is complete
                         hideAnimal()
+                        
+                        // Advance to next lesson (this will move to lesson + 1, level 0)
                         engine.nextLevel()
+                        
+                        // Force scene update after state changes
                         sceneUpdateTrigger += 1
                     },
                     onExit: {
