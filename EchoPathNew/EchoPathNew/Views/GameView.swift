@@ -269,19 +269,36 @@ struct GameView: View {
     }
     
     private func handleSkipLevel() {
-        // Check if we're completing a lesson (on last level of current lesson)
-        if engine.isLastLevelInLesson {
-            // Stop all animations and force immediate reset
-            stopAllAnimationsAndReset()
+        // Play animation before skipping if it hasn't been played yet
+        Task {
+            // If animation hasn't been played for this level, play it first
+            if !hasPlayedCompletionAnimation {
+                hasPlayedCompletionAnimation = true
+                await showAnimal()
+                await playAnimation(for: engine.currentLevel, lesson: engine.currentLesson)
+            }
             
-            // Show lesson completion screen
-            completedLessonIndex = engine.currentLesson
-            hasNextLessonAvailable = !engine.isLastLessonInUnit
-            showLessonComplete = true
-        } else {
-            // Just moving to next level within the same lesson
-            engine.nextLevel()
-            sceneUpdateTrigger += 1
+            // Wait a brief moment after animation completes
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // Now proceed with skip logic
+            if engine.isLastLevelInLesson {
+                // Stop all animations and force immediate reset
+                stopAllAnimationsAndReset()
+                
+                // Show lesson completion screen
+                completedLessonIndex = engine.currentLesson
+                hasNextLessonAvailable = !engine.isLastLessonInUnit
+                showLessonComplete = true
+            } else {
+                // Just moving to next level within the same lesson
+                // Reset the completion animation flag for the new level
+                hasPlayedCompletionAnimation = false
+                // Hide animal - will appear again when new level is complete
+                hideAnimal()
+                engine.nextLevel()
+                sceneUpdateTrigger += 1
+            }
         }
     }
     
@@ -392,10 +409,11 @@ struct GameView: View {
         parent.name = "Slot_\(index)"
         
         // Create box for slot - pink for active slot, lavender for others
-        let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.01])
+        // Increased depth (Z axis) from 0.01 to 0.06 to make it easier to drag words into
+        let boxMesh = MeshResource.generateBox(size: [0.12, 0.06, 0.06])
         let isActive = index == engine.currentStep
         let slotColor: UIColor = isActive ? Color.pastelPink.uiColor : Color.lavender.uiColor
-        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.7), isMetallic: false)
+        let material = SimpleMaterial(color: slotColor.withAlphaComponent(0.5), isMetallic: false)
         let box = ModelEntity(mesh: boxMesh, materials: [material])
         box.generateCollisionShapes(recursive: true)
         box.components.set(InputTargetComponent(allowedInputTypes: .indirect))
@@ -799,9 +817,9 @@ struct GameView: View {
         // Run a few cycles then stop (not infinite loop)
         let cycles = 3
         for _ in 0..<cycles {
-            // Move forward and up
+            // Move along X axis (left/right) and up
             var transform = animalRoot.transform
-            transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + bounceHeight, basePosition.z + moveDistance)
+            transform.translation = SIMD3<Float>(basePosition.x + moveDistance, basePosition.y + bounceHeight, basePosition.z)
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
@@ -829,17 +847,18 @@ struct GameView: View {
         let bounceHeight: Float = 0.02
         let moveDistance: Float = 0.05
         let baseRootTransform = animalRoot.transform
+        let basePosition = baseRootTransform.translation
         
-        // Run (bounce)
+        // Run (bounce) along X axis
         for _ in 0..<2 {
             var transform = baseRootTransform
-            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3 + moveDistance)
+            transform.translation = SIMD3<Float>(basePosition.x + moveDistance, basePosition.y + bounceHeight, basePosition.z)
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
                 duration: 0.3
             )
-            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            transform.translation = basePosition
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
@@ -849,9 +868,21 @@ struct GameView: View {
         
         // Pause briefly
         try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second pause
+        
+        // Return to original position
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
     }
     
     private func runEatAndShake(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let baseRootTransform = animalRoot.transform
+        let basePosition = baseRootTransform.translation
+        
         // Run + eating (from previous)
         await runAndEat(animalRoot: animalRoot, animalModel: animalModel, duration: 2.0)
         
@@ -875,45 +906,66 @@ struct GameView: View {
                 duration: 0.15
             )
         }
+        
+        // Return to original position and rotation
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        finalTransform.rotation = baseRootTransform.rotation
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
     }
     
     // Lesson 2 Animations
     private func happyBounceAndTilt(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
         let bounceHeight: Float = 0.03
         let baseRootTransform = animalRoot.transform
+        let basePosition = baseRootTransform.translation
         
-        // Bounce animation
+        // Bounce animation (in place)
         for _ in 0..<Int(duration * 2) {
             var transform = baseRootTransform
-            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3)
+            transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + bounceHeight, basePosition.z)
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
                 duration: 0.4
             )
-            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            transform.translation = basePosition
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
                 duration: 0.4
             )
         }
+        
+        // Return to original position
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
     }
     
     private func bigJump(animalRoot: Entity, duration: Float) async {
         let jumpHeight: Float = 0.15
         let baseTransform = animalRoot.transform
+        let basePosition = baseTransform.translation
         
         // Jump up
         var transform = baseTransform
-        transform.translation = SIMD3<Float>(0, jumpHeight, -0.3)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + jumpHeight, basePosition.z)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: TimeInterval(duration * 0.5)
         )
         // Come down
-        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        transform.translation = basePosition
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
@@ -922,6 +974,9 @@ struct GameView: View {
     }
     
     private func jumpAndWag(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let baseRootTransform = animalRoot.transform
+        let basePosition = baseRootTransform.translation
+        
         // Jump
         await bigJump(animalRoot: animalRoot, duration: 1.0)
         
@@ -945,27 +1000,50 @@ struct GameView: View {
                 duration: 0.1
             )
         }
+        
+        // Return to original position and rotation
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        finalTransform.rotation = baseRootTransform.rotation
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
     }
     
     private func jumpFastWagAndHop(animalRoot: Entity, animalModel: ModelEntity, duration: Float) async {
+        let baseRootTransform = animalRoot.transform
+        let basePosition = baseRootTransform.translation
+        
         // Jump + wag
         await jumpAndWag(animalRoot: animalRoot, animalModel: animalModel, duration: 2.0)
         
-        // Small hop
+        // Small hop (in place)
         let hopHeight: Float = 0.05
         let baseTransform = animalRoot.transform
         var transform = baseTransform
-        transform.translation = SIMD3<Float>(0, hopHeight, -0.3)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + hopHeight, basePosition.z)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: 0.3
         )
-        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        transform.translation = basePosition
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: 0.3
+        )
+        
+        // Return to original position
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        finalTransform.rotation = baseRootTransform.rotation
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
         )
     }
     
@@ -975,10 +1053,11 @@ struct GameView: View {
         let originalScale = animalModel.scale.x
         let baseRootTransform = animalRoot.transform
         let baseModelTransform = animalModel.transform
+        let basePosition = baseRootTransform.translation
         
-        // Small hop
+        // Small hop (in place)
         var rootTransform = baseRootTransform
-        rootTransform.translation = SIMD3<Float>(0, hopHeight, -0.3)
+        rootTransform.translation = SIMD3<Float>(basePosition.x, basePosition.y + hopHeight, basePosition.z)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: rootTransform,
@@ -995,7 +1074,7 @@ struct GameView: View {
         )
         
         // Come down and scale back
-        rootTransform.translation = SIMD3<Float>(0, 0, -0.3)
+        rootTransform.translation = basePosition
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: rootTransform,
@@ -1012,34 +1091,45 @@ struct GameView: View {
     private func playBounces(animalRoot: Entity, duration: Float) async {
         let bounceHeight: Float = 0.06
         let baseTransform = animalRoot.transform
+        let basePosition = baseTransform.translation
         let bounceDuration = TimeInterval(duration / 6.0)
         
-        // 3 quick bounces
+        // 3 quick bounces (in place)
         for _ in 0..<3 {
             var transform = baseTransform
-            transform.translation = SIMD3<Float>(0, bounceHeight, -0.3)
+            transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + bounceHeight, basePosition.z)
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
                 duration: bounceDuration
             )
-            transform.translation = SIMD3<Float>(0, 0, -0.3)
+            transform.translation = basePosition
             await AnimalAnimationHelper.animateTransform(
                 entity: animalRoot,
                 targetTransform: transform,
                 duration: bounceDuration
             )
         }
+        
+        // Return to original position
+        var finalTransform = animalRoot.transform
+        finalTransform.translation = basePosition
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: finalTransform,
+            duration: 0.2
+        )
     }
     
     private func moveForwardAndBounce(animalRoot: Entity, duration: Float) async {
         let forwardDistance: Float = 0.15
         let bounceHeight: Float = 0.08
         let baseTransform = animalRoot.transform
+        let basePosition = baseTransform.translation
         
         // Move forward and bounce up
         var transform = baseTransform
-        transform.translation = SIMD3<Float>(0, bounceHeight, -0.3 + forwardDistance)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + bounceHeight, basePosition.z + forwardDistance)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
@@ -1047,15 +1137,15 @@ struct GameView: View {
         )
         
         // Bounce back down
-        transform.translation = SIMD3<Float>(0, 0, -0.3 + forwardDistance)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y, basePosition.z + forwardDistance)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: TimeInterval(duration * 0.2)
         )
         
-        // Move back
-        transform.translation = SIMD3<Float>(0, 0, -0.3)
+        // Move back to original position
+        transform.translation = basePosition
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
@@ -1067,10 +1157,11 @@ struct GameView: View {
         let forwardDistance: Float = 0.15
         let hopHeight: Float = 0.08
         let baseTransform = animalRoot.transform
+        let basePosition = baseTransform.translation
         
         // Move forward
         var transform = baseTransform
-        transform.translation = SIMD3<Float>(0, 0, -0.3 + forwardDistance)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y, basePosition.z + forwardDistance)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
@@ -1088,17 +1179,26 @@ struct GameView: View {
         )
         
         // Hop
-        transform.translation = SIMD3<Float>(0, hopHeight, transform.translation.z)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y + hopHeight, basePosition.z + forwardDistance)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: TimeInterval(duration * 0.15)
         )
-        transform.translation = SIMD3<Float>(0, 0, transform.translation.z)
+        transform.translation = SIMD3<Float>(basePosition.x, basePosition.y, basePosition.z + forwardDistance)
         await AnimalAnimationHelper.animateTransform(
             entity: animalRoot,
             targetTransform: transform,
             duration: TimeInterval(duration * 0.15)
+        )
+        
+        // Return to original position and rotation
+        transform.translation = basePosition
+        transform.rotation = baseTransform.rotation
+        await AnimalAnimationHelper.animateTransform(
+            entity: animalRoot,
+            targetTransform: transform,
+            duration: TimeInterval(duration * 0.2)
         )
     }
 }
