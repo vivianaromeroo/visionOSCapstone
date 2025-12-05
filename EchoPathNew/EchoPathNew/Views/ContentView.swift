@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  EchoPathNew
-//
-//  Created by Admin2  on 4/22/25.
-//
-
 import SwiftUI
 import RealityKit
 import RealityKitContent
@@ -22,7 +15,7 @@ struct ContentView: View {
                     HStack {
                         Spacer()
 
-                        NavigationLink(destination: AnimalPickerView()) {
+                        NavigationLink(destination: LoginView()) {
                             Image("StartButton")
                                 .resizable()
                                 .interpolation(.none)
